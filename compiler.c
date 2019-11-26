@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "util.h"
+#include "absyn.h"
 
 extern FILE *yyin;
 extern int yyparse(void);
+extern A_expList absyn_root;
 
 void parse(string fileName) {
     yyin = fopen(fileName, "r");

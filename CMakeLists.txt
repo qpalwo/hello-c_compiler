@@ -6,7 +6,15 @@ set(
 	HELLO_LIB 
 	$<TARGET_OBJECTS:util>
 	$<TARGET_OBJECTS:compiler>
+	$<TARGET_OBJECTS:absyn>
 	)
+
+set(
+	SOURCE_FILE_LIST
+	util.c
+	absyn.c
+	compiler.c
+)
 
 
 find_package(BISON)
@@ -27,14 +35,17 @@ include_directories(
 	${CMAKE_SOURCE_DIR}/include
 )
 
-add_library(util OBJECT util.c)
+# add_library(util OBJECT util.c)
 
-add_library(compiler OBJECT compiler.c)
+# add_library(compiler OBJECT compiler.c)
+
+# add_library(absyn OBJECT absyn.c)
 
 
 add_executable(
 	${EXECUTABLE_NAME}
-	${HELLO_LIB}
+	${SOURCE_FILE_LIST}
+	# ${HELLO_LIB}
 	${BISON_HelloParser_OUTPUTS}
 	${FLEX_HelloScanner_OUTPUTS}
 	)

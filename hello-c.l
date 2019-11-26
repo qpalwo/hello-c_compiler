@@ -1,5 +1,6 @@
 %{
 #include "util.h"
+#include "absyn.h"
 #include "parser.h"
 #define YY_USER_ACTION fwrite( yytext, yyleng, 1, yyout );
 
@@ -41,7 +42,7 @@ break   {return BREAK;}
 "|" {return OR;}
 
 [a-z|A-Z]+[a-z|A-Z|0-9|_]* {
-    yylval.id = yytext;
+    yylval.sval = yytext;
     return ID;
 }
 
