@@ -5,7 +5,7 @@
 
 extern FILE *yyin;
 extern int yyparse(void);
-extern A_expList absyn_root;
+extern A_funList absyn_root;
 
 void parse(string fileName) {
     yyin = fopen(fileName, "r");

@@ -31,12 +31,18 @@
 17. \>
 18. <
 19. &
-20. |
+20. |  
 
 ## Example
 
 ```c
 int fun(int a, float b) {
+  int c = 0;
   
+}
+
+void fun1() {
+  int a = fun(1, 2);
+  a += 1;
 }
 ```

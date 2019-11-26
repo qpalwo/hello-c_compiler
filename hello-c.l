@@ -24,8 +24,10 @@ int {return INT;}
 float   {return FLOAT;}
 continue    {return CONTINUE;}
 break   {return BREAK;}
+return  {return RETURN;}
 
 ,   {return COMMA;}
+":" {return COLON;}
 ";" {return SEMICOLON;}
 "(" {return LPAREN;}
 ")" {return RPAREN;}
@@ -38,8 +40,16 @@ break   {return BREAK;}
 "-" {return MINUS;}
 "*" {return TIMES;}
 "/" {return DIVIDE;}
+"=" {return ASSIGN;}
+"!" {return NOT;}
 "&" {return AND;}
 "|" {return OR;}
+"<" {return LT;}
+">" {return GT;}
+"<=" {return LE;}
+">=" {return GE;}
+"==" {return EQ;}
+"!=" {return NEQ;}
 
 [a-z|A-Z]+[a-z|A-Z|0-9|_]* {
     yylval.sval = yytext;
