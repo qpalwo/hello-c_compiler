@@ -1,12 +1,13 @@
 %{
 #include "util.h"
+#include "symbol.h"
 #include "absyn.h"
 #define NULL 0
 
 extern int yylineno;
 
 int yydebug = 1;
-A_funList absyn_root;
+A_globalDecList absyn_root;
 
 int yylex(void);
 
@@ -18,62 +19,58 @@ void yyerror(char * s) {
     int ival;
     string sval;
     float fval;
-    A_fun fundec;
-    A_funList funlist;
+    char cval;
+    A_globalDec dec;
+    A_globalDecList declist;
     A_expList explist;
     A_exp exp;
     A_stm stm;
     A_stmList stmlist;
-    A_type type;
-    A_field para;
-    A_fieldList paralist;
+    A_tyDec tydec;
+    A_tyDecList tydeclist;
 }
 
 %token <sval> ID
-%token <ival> INUM
-%token <fval> FNUM
+%token <ival> INT
+%token <fval> FLOAT
+%token <cval> CHAR
 
 %token
-WHILE VOID INT FLOAT BREAK CONTINUE IF ELSE RETURN
+WHILE BREAK CONTINUE IF ELSE RETURN STRUCT
 COMMA COLON SEMICOLON LPAREN RPAREN LBRACK RBRACK LBRACE RBRACE DOT 
 PLUS MINUS TIMES DIVIDE NOT AND OR ASSIGN LT GT
 EQ NEQ LE GE 
 
 %type <exp> exp assignexp callexp
-%type <para> para
 %type <explist> explist
-%type <paralist> paralist
-%type <fundec> fundec
-%type <funlist> funlist
-%type <type> type
+%type <dec> dec
+%type <declist> declist
 %type <stm> stm
 %type <stmlist> stmlist
+%type <tydec> tydec
+%type <tydeclist> tydeclist
 
 
 %start prog
 
 %%
 
-prog: funlist { absyn_root = $1; }
+prog: declist { absyn_root = $1; }
 ;
 
-funlist:    fundec { $$ = A_FunList($1, NULL); }
-        |   fundec funlist { $$ = A_FunList($1, $2); }
+declist:    dec { $$ = A_GlobalDecList($1, NULL); }
+        |   dec declist { $$ = A_GlobalDecList($1, $2); }
 ;
 
-fundec: type ID LPAREN paralist RPAREN LBRACE stmlist RBRACE { $$ = A_Fun(yylineno, $1, $2, $4, $7); }
+dec:    ID ID LPAREN tydeclist RPAREN LBRACE stmlist RBRACE { $$ = A_Fun(yylineno, S_Symbol($1), S_Symbol($2), $4, $7); }
+    |   STRUCT ID LBRACE tydeclist RBRACE { $$ = A_Struct(yylineno, S_Symbol($2), $4); }
 ;
 
-paralist:   para { $$ = A_FieldList($1, NULL); }
-        |   para COMMA paralist { $$ = A_FieldList($1, $3); }
+tydeclist:  tydec { $$ = A_TyDecList($1, NULL); }
+        |   tydec COMMA tydeclist { $$ = A_TyDecList($1, $3); }
 ;
 
-para:   type ID { $$ = A_Field(yylineno, $1, $2); }
-;
-
-type:   VOID { $$ = A_Void(yylineno); }
-    |   INT { $$ = A_Int(yylineno); }
-    |   FLOAT { $$ = A_Float(yylineno); }
+tydec:  ID ID { $$ = A_Var(yylineno, S_Symbol($1), S_Symbol($2)); }
 ;
 
 stmlist:    stm SEMICOLON { $$ = A_StmList($1, NULL); }
@@ -92,7 +89,7 @@ exp:    assignexp { $$ = $1; }
 ;
 
 assignexp:  ID ASSIGN exp { $$ = A_Assign(yylineno, $1, $3); }
-        |   type ID ASSIGN exp { $$ = A_Assign(yylineno, $2, $4); }
+        |   ID ID ASSIGN exp { $$ = A_Assign(yylineno, $2, $4); }
 ;
 
 callexp:    ID LPAREN explist RPAREN {}//{ $$ = A_Call(yylineno, $1, $3); }

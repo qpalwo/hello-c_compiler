@@ -1,4 +1,3 @@
-
 #define LIST_STRUCT(name) \
 typedef struct A_##name##List_ * A_##name##List;\
 struct A_##name##List_ { \
@@ -15,34 +14,46 @@ A_##name##List A_##Name##List(A_##name head, A_##name##List tail) { \
 }
 
 #define LIST_DEFINE(name, Name) \
+TYPE_DEF(name) \
 LIST_STRUCT(name) \
 A_##name##List A_##Name##List(A_##name, A_##name##List);
 
-typedef int A_line;
-typedef struct A_type_ * A_type;
-typedef struct A_data_ * A_data;
-LIST_DEFINE(data, Data)
-typedef struct A_fun_ * A_fun;
-LIST_DEFINE(fun, Fun)
-typedef struct A_stm_ * A_stm;
-LIST_DEFINE(stm, Stm)
-typedef struct A_exp_ * A_exp;
-LIST_DEFINE(exp, Exp)
-typedef struct A_type_ * A_type;
-typedef struct A_field_ * A_field;
-LIST_DEFINE(field, Field)
+#define TYPE_DEF(name) \
+typedef struct A_##name##_ * A_##name;
 
-struct A_type_ {
-    enum {A_VOID, A_INT, A_FLOAT, A_SYMBOL} kind;
+typedef int A_line;
+
+LIST_DEFINE(stm, Stm)
+LIST_DEFINE(exp, Exp)
+LIST_DEFINE(globalDec, GlobalDec)
+LIST_DEFINE(tyDec, TyDec)
+
+struct A_globalDec_ {
+    enum { A_FUN, A_STRUCT } kind;
     A_line linno;
+    union {
+        struct {
+            A_line linno;
+            S_symbol ret;
+            S_symbol name;
+            A_tyDecList para;
+            A_expList body;
+        } fun;
+        struct {
+            S_symbol name;
+            A_tyDecList declist;
+        } struc;
+    } u;
 };
 
-struct A_data_ {
-    A_type type;
+struct A_tyDec_ {
+    enum { A_VAR, A_ARRAY } kind;
+    A_line linno;
     union {
-        int ival;
-        float fval;
-        string symbol;
+        struct {
+            S_symbol type;
+            S_symbol name;
+        } var;
     } u;
 };
 
@@ -68,39 +79,11 @@ struct A_stm_ {
     } u;
 };
 
-struct A_fun_ {
-    A_line linno;
-    A_type ret;
-    string name;
-    A_fieldList para;
-    A_expList body;
-};
+A_globalDec A_Fun(A_line, S_symbol, S_symbol, A_tyDecList, A_expList);
 
-struct A_field_ {
-    A_line linno;
-    A_type type;
-    string name;
-};
+A_globalDec A_Struct(A_line, S_symbol, A_tyDecList);
 
-A_fun A_Fun(A_line, A_type, string, A_fieldList, A_expList);
-
-A_type A_Void(A_line);
-
-A_type A_Int(A_line);
-
-A_type A_Float(A_line);
-
-A_type A_Symbol(A_line);
-
-A_data A_IData(A_line, int);
-
-A_data A_FData(A_line, float);
-
-A_data A_VData(A_line);
-
-A_data A_SData(A_line, string);
-
-A_field A_Field(A_line, A_type, string);
+A_tyDec A_Var(A_line, S_symbol, S_symbol);
 
 A_stm A_Assign(A_line, string, A_exp);
 

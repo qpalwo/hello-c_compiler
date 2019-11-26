@@ -14,6 +14,7 @@ set(
 	util.c
 	absyn.c
 	compiler.c
+	symbol.c
 )
 
 

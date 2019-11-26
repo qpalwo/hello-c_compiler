@@ -1,83 +1,38 @@
 #include "util.h"
+#include "symbol.h"
 #include "absyn.h"
 
-LIST_FUN(fun, Fun)
 LIST_FUN(exp, Exp)
-LIST_FUN(field, Field)
-LIST_FUN(data, Data)
 LIST_FUN(stm, Stm)
+LIST_FUN(globalDec, GlobalDec)
+LIST_FUN(tyDec, TyDec)
 
-A_fun A_Fun(A_line linno, A_type ret, string name, A_fieldList para, A_expList body) {
-    A_fun fun = checked_malloc(sizeof(*fun));
-    fun->linno = linno;
-    fun->ret = ret;
-    fun->name = name;
-    fun->para = para;
-    fun->body = body;
+A_globalDec A_Fun(A_line linno, S_symbol ret, S_symbol name, A_tyDecList para, A_expList body) {
+    A_globalDec fun = checked_malloc(sizeof(*fun));
+    fun->u.fun.linno = linno;
+    fun->u.fun.ret = ret;
+    fun->u.fun.name = name;
+    fun->u.fun.para = para;
+    fun->u.fun.body = body;
     return fun;
 }
 
-A_type A_Void(A_line linno) {
-    A_type ty = checked_malloc(sizeof(*ty));
-    ty->linno = linno;
-    ty->kind = A_VOID;
-    return ty;
+A_tyDec A_Var(A_line linno, S_symbol type, S_symbol name) {
+    A_tyDec tydec = checked_malloc(sizeof(*tydec));
+    tydec->kind = A_VAR;
+    tydec->linno = linno;
+    tydec->u.var.type = type;
+    tydec->u.var.name = name;
+    return tydec;
 }
 
-A_type A_Int(A_line linno) {
-    A_type ty = checked_malloc(sizeof(*ty));
-    ty->linno = linno;
-    ty->kind = A_INT;
-    return ty;
-}
-
-A_type A_Float(A_line linno) {
-    A_type ty = checked_malloc(sizeof(*ty));
-    ty->linno = linno;
-    ty->kind = A_FLOAT;
-    return ty;
-}
-
-A_type A_Symbol(A_line linno) {
-    A_type ty = checked_malloc(sizeof(*ty));
-    ty->linno = linno;
-    ty->kind = A_SYMBOL;
-    return ty;
-}
-
-A_data A_IData(A_line linno, int val) {
-    A_data data = checked_malloc(sizeof(*data));
-    data->type = A_Int(linno);
-    data->u.ival = val;
-    return data;
-}
-
-A_data A_FData(A_line linno, float val) {
-    A_data data = checked_malloc(sizeof(*data));
-    data->type = A_Float(linno);
-    data->u.fval = val;
-    return data;
-}
-
-A_data A_VData(A_line linno) {
-    A_data data = checked_malloc(sizeof(*data));
-    data->type = A_Void(linno);
-    return data;
-}
-
-A_data A_SData(A_line linno, string symbol) {
-    A_data data = checked_malloc(sizeof(*data));
-    data->type = A_Symbol(linno);
-    data->u.symbol = symbol;
-    return data;
-}
-
-A_field A_Field(A_line linno, A_type type, string name) {
-    A_field field = checked_malloc(sizeof(*field));
-    field->linno = linno;
-    field->type = type;
-    field->name = name;
-    return field;
+A_globalDec A_Struct(A_line linno, S_symbol name, A_tyDecList declist) {
+    A_globalDec tydec = checked_malloc(sizeof(*tydec));
+    tydec->kind = A_STRUCT;
+    tydec->linno = linno;
+    tydec->u.struc.name = name;
+    tydec->u.struc.declist = declist;
+    return tydec;
 }
 
 A_stm A_Assign(A_line linno, string field, A_exp exp) {
@@ -86,7 +41,7 @@ A_stm A_Assign(A_line linno, string field, A_exp exp) {
     assign->kind = A_ASSIGN;
     assign->u.assign.symbol = field;
     assign->u.assign.exp = exp;
-    return exp;
+    return assign;
 }
 
 A_exp A_Call(A_line linno, string name, A_expList para) {
