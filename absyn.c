@@ -17,12 +17,22 @@ A_globalDec A_Fun(A_line linno, S_symbol ret, S_symbol name, A_tyDecList para, A
     return fun;
 }
 
-A_tyDec A_Var(A_line linno, S_symbol type, S_symbol name) {
+A_tyDec A_VarDec(A_line linno, S_symbol type, S_symbol name) {
     A_tyDec tydec = checked_malloc(sizeof(*tydec));
     tydec->kind = A_VAR_DEC;
     tydec->linno = linno;
     tydec->u.var.type = type;
     tydec->u.var.name = name;
+    return tydec;
+}
+
+A_tyDec A_ArrayDec(A_line linno, S_symbol type, S_symbol name, A_expList exp) {
+    A_tyDec tydec = checked_malloc(sizeof(*tydec));
+    tydec->kind = A_ARRAY_DEC;
+    tydec->linno = linno;
+    tydec->u.array.name = name;
+    tydec->u.array.type = type;
+    tydec->u.array.exp = exp;
     return tydec;
 }
 

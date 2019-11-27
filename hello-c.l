@@ -3,8 +3,14 @@
 #include "symbol.h"
 #include "absyn.h"
 #include "parser.h"
-#define YY_USER_ACTION fwrite( yytext, yyleng, 1, yyout );
+#define YY_USER_ACTION \
+{ \
+    if (lexPrint) { \
+        fwrite( yytext, yyleng, 1, yyout ); \
+    } \
+} 
 
+int lexPrint = 0;
 int commentNest = 0;
 bool hasChar = FALSE;
 

@@ -10,7 +10,7 @@ A_##name##List A_##Name##List(A_##name head, A_##name##List tail) { \
     A_##name##List list = checked_malloc(sizeof(*list)); \
     list->head = head; \
     list->tail = tail; \
-    return tail; \
+    return list; \
 }
 
 #define LIST_DEFINE(name, Name) \
@@ -58,6 +58,11 @@ struct A_tyDec_ {
             S_symbol type;
             S_symbol name;
         } var;
+        struct {
+            S_symbol type;
+            S_symbol name;
+            A_expList exp;
+        } array;
     } u;
 };
 
@@ -133,7 +138,9 @@ A_globalDec A_Fun(A_line, S_symbol, S_symbol, A_tyDecList, A_stmList);
 
 A_globalDec A_Struct(A_line, S_symbol, A_tyDecList);
 
-A_tyDec A_Var(A_line, S_symbol, S_symbol);
+A_tyDec A_VarDec(A_line, S_symbol, S_symbol);
+
+A_tyDec A_ArrayDec(A_line, S_symbol, S_symbol, A_expList);
 
 A_var A_SymbolVar(A_line, S_symbol);
 

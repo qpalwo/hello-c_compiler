@@ -15,6 +15,7 @@ set(
 	absyn.c
 	compiler.c
 	symbol.c
+	astprinter.c
 )
 
 

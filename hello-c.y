@@ -8,6 +8,7 @@ extern int yylineno;
 
 int yydebug = 0;
 A_globalDecList absyn_root;
+int rootnull = 1;
 
 int yylex(void);
 
@@ -15,6 +16,7 @@ void yyerror(char * s) {
     ErrorMsg(yylineno, "%s", s);
 }
 %}
+%token-table
 
 %union {
     int ival;
@@ -33,11 +35,14 @@ void yyerror(char * s) {
 }
 
 %right ASSIGN
+%left AND OR
 %nonassoc LT GT LE GE EQ NEQ 
 %left PLUS MINUS
 %left TIMES DIVIDE
-%left SPLUS SMINUS
 %left BITAND BITOR
+%left SPLUS SMINUS
+%left UMINUS
+%nonassoc NOT
 
 %token <sval> ID
 %token <ival> INT
@@ -48,7 +53,8 @@ void yyerror(char * s) {
 WHILE BREAK CONTINUE IF ELSE RETURN STRUCT
 COMMA COLON SEMICOLON LPAREN RPAREN LBRACK RBRACK LBRACE RBRACE DOT 
 // PLUS MINUS TIMES DIVIDE NOT AND OR ASSIGN LT GT
-NOT AND OR SPLUS SMINUS
+// NOT 
+// AND OR SPLUS SMINUS
 // EQ NEQ LE GE 
 
 
@@ -82,7 +88,8 @@ tydeclist:  tydec { $$ = A_TyDecList($1, NULL); }
         |   tydec COMMA tydeclist { $$ = A_TyDecList($1, $3); }
 ;
 
-tydec:  ID ID { $$ = A_Var(yylineno, S_Symbol($1), S_Symbol($2)); }
+tydec:  ID ID { $$ = A_VarDec(yylineno, S_Symbol($1), S_Symbol($2)); }
+    |   ID arrayexplist ID { $$ = A_ArrayDec(yylineno, S_Symbol($1), S_Symbol($3), $2); }
     |   { $$ = NULL; }
 ;
 
@@ -121,8 +128,7 @@ constexp:   CHAR { $$ = A_Char(yylineno, $1); }
 singexp:    exp SPLUS { $$ = A_SingleExp(yylineno, A_SPLUS, $1); }
         |   exp SMINUS { $$ = A_SingleExp(yylineno, A_SMINUS, $1); }
         |   NOT exp { $$ = A_SingleExp(yylineno, A_NOT, $2); }
-        |   MINUS exp { $$ = A_SingleExp(yylineno, A_NEGATIVE, $2); }
-        |   PLUS exp { $$ = A_SingleExp(yylineno, A_POSITIVE, $2); }
+        |   MINUS exp %prec UMINUS { $$ = A_SingleExp(yylineno, A_NEGATIVE, $2); }
 ;
 
 doublexp:   exp PLUS exp { $$ = A_DoubleExp(yylineno, A_PLUS, $1, $3); }
@@ -170,3 +176,7 @@ ifstm:  IF LPAREN exp RPAREN LBRACE
                 stmlist 
                 RBRACE ELSE ifstm { $$ = A_IfStm(yylineno, $3, $6, A_StmList($9, NULL)); }
 ;
+%%
+void printSymbol(FILE * out, int index) {
+    YYFPRINTF(out, "%s", yytname[index - 258 + 3]);
+}

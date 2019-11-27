@@ -1,5 +1,6 @@
 int fun () {
     int a;
+    int [1][2] v;
     a = fun(1, '2');
     a = 1.1;
     a = a++;
