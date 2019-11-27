@@ -37,7 +37,7 @@ struct A_globalDec_ {
             S_symbol ret;
             S_symbol name;
             A_tyDecList para;
-            A_expList body;
+            A_stmList body;
         } fun;
         struct {
             S_symbol name;
@@ -58,33 +58,71 @@ struct A_tyDec_ {
 };
 
 struct A_exp_ {
-    enum {A_CALL} kind;
+    enum { A_CONST, A_CALL } kind;
     A_line linno;
     union {
         struct {
-            string name;
+            enum { A_INT, A_CHAR, A_FLOAT } kind;
+            union {
+                char cnum;
+                int inum;
+                float fnum;
+            } u;
+        } cons;
+        struct {
+            S_symbol name;
             A_expList para;
         } call;
     } u;
 };
 
 struct A_stm_ {
-    enum {A_ASSIGN} kind;
+    enum {A_ASSIGN_STM, A_DEC_STM, A_IF_STM, A_WHILE_STM, 
+    A_BREAK_STM, A_CONTINUE_STM, A_RETURN_STM } kind;
     A_line linno;
     union {
         struct {
             string symbol;
             A_exp exp;
         } assign;
+        A_tyDec dec;
+        struct {
+            A_exp test;
+            A_stmList iff;
+            A_stmList elsee;
+        } iff;
+        struct {
+            A_exp test;
+            A_stmList whilee;
+        } whilee;
+        A_exp returnn;
     } u;
 };
 
-A_globalDec A_Fun(A_line, S_symbol, S_symbol, A_tyDecList, A_expList);
+A_globalDec A_Fun(A_line, S_symbol, S_symbol, A_tyDecList, A_stmList);
 
 A_globalDec A_Struct(A_line, S_symbol, A_tyDecList);
 
 A_tyDec A_Var(A_line, S_symbol, S_symbol);
 
-A_stm A_Assign(A_line, string, A_exp);
+A_stm A_AssignStm(A_line, string, A_exp);
 
-A_exp A_Call(A_line, string, A_expList);
+A_stm A_DecStm(A_line, A_tyDec);
+
+A_stm A_IfStm(A_line, A_exp, A_stmList, A_stmList);
+
+A_stm A_WhileStm(A_line, A_exp, A_stmList);
+
+A_stm A_BreakStm(A_line);
+
+A_stm A_ContinueStm(A_line);
+
+A_stm A_ReturnStm(A_line, A_exp);
+
+A_exp A_Call(A_line, S_symbol, A_expList);
+
+A_exp A_Char(A_line, char);
+
+A_exp A_Int(A_line, int);
+
+A_exp A_Float(A_line, float);

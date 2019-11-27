@@ -7,3 +7,4 @@ typedef char *string;
 
 void *checked_malloc(int);
 string String(char *);
+void ErrorMsg(int pos, char *message,...);

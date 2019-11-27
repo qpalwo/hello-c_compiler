@@ -6,6 +6,7 @@
 #define YY_USER_ACTION fwrite( yytext, yyleng, 1, yyout );
 
 int commentNest = 0;
+bool hasChar = FALSE;
 
 int yywrap() {
     return 1;
@@ -14,7 +15,7 @@ int yywrap() {
 %}
 %option yylineno
 
-%x COMMENT_STATE
+%x COMMENT_STATE CHAR_STATE
 %%
 " "	 {continue;}
 [ \r\t] {continue;}
@@ -72,6 +73,12 @@ return  {return RETURN;}
     commentNest += 1;
     BEGIN(COMMENT_STATE);
 }
+
+'.' {
+    yylval.cval = yytext[1];
+    return CHAR;
+}
+
 
 <COMMENT_STATE>{
     "/*" {
