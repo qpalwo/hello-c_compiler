@@ -22,7 +22,11 @@ A_##name##List A_##Name##List(A_##name, A_##name##List);
 typedef struct A_##name##_ * A_##name;
 
 typedef int A_line;
+typedef enum { A_SPLUS, A_SMINUS, A_NEGATIVE, A_POSITIVE, A_NOT } sop;
+typedef enum { A_PLUS, A_MINUS, A_TIMES, A_DIVIDE, A_EQ, A_NEQ,
+            A_GT, A_GE, A_LT, A_LE, A_BITAND, A_BITOR, A_AND, A_OR } dop;
 
+TYPE_DEF(var)
 LIST_DEFINE(stm, Stm)
 LIST_DEFINE(exp, Exp)
 LIST_DEFINE(globalDec, GlobalDec)
@@ -47,7 +51,7 @@ struct A_globalDec_ {
 };
 
 struct A_tyDec_ {
-    enum { A_VAR, A_ARRAY } kind;
+    enum { A_VAR_DEC, A_ARRAY_DEC } kind;
     A_line linno;
     union {
         struct {
@@ -57,22 +61,48 @@ struct A_tyDec_ {
     } u;
 };
 
+struct A_var_ {
+    enum { A_SYMBOL_VAR, A_ARRAY_VAR, A_STRUCT_VAR } kind;
+    A_line linno;
+    union {
+        S_symbol symbol;
+        struct {
+            S_symbol symbol;
+            A_expList exp;
+        } arrayvar;
+        struct {
+            S_symbol para;
+            S_symbol child;
+        } structvar;
+    } u;
+};
+
 struct A_exp_ {
-    enum { A_CONST, A_CALL } kind;
+    enum { A_CONST, A_CALL, A_DOUBLE_EXP, A_SINGLE_EXP } kind;
     A_line linno;
     union {
         struct {
-            enum { A_INT, A_CHAR, A_FLOAT } kind;
+            enum { A_INT, A_CHAR, A_FLOAT, A_VAR } kind;
             union {
                 char cnum;
                 int inum;
                 float fnum;
+                A_var var;
             } u;
         } cons;
         struct {
             S_symbol name;
             A_expList para;
         } call;
+        struct {
+            sop op;
+            A_exp exp;
+        } singexp;
+        struct {
+            dop op;
+            A_exp left;
+            A_exp right;
+        } doublexp;
     } u;
 };
 
@@ -82,7 +112,7 @@ struct A_stm_ {
     A_line linno;
     union {
         struct {
-            string symbol;
+            A_var symbol;
             A_exp exp;
         } assign;
         A_tyDec dec;
@@ -105,7 +135,13 @@ A_globalDec A_Struct(A_line, S_symbol, A_tyDecList);
 
 A_tyDec A_Var(A_line, S_symbol, S_symbol);
 
-A_stm A_AssignStm(A_line, string, A_exp);
+A_var A_SymbolVar(A_line, S_symbol);
+
+A_var A_ArrayVar(A_line, S_symbol, A_expList);
+
+A_var A_StructVar(A_line, S_symbol, S_symbol);
+
+A_stm A_AssignStm(A_line, A_var, A_exp);
 
 A_stm A_DecStm(A_line, A_tyDec);
 
@@ -121,8 +157,14 @@ A_stm A_ReturnStm(A_line, A_exp);
 
 A_exp A_Call(A_line, S_symbol, A_expList);
 
+A_exp A_SingleExp(A_line, sop, A_exp);
+
+A_exp A_DoubleExp(A_line, dop, A_exp, A_exp);
+
 A_exp A_Char(A_line, char);
 
 A_exp A_Int(A_line, int);
 
 A_exp A_Float(A_line, float);
+
+A_exp A_VarExp(A_line, A_var);

@@ -45,14 +45,18 @@ return  {return RETURN;}
 "/" {return DIVIDE;}
 "=" {return ASSIGN;}
 "!" {return NOT;}
-"&" {return AND;}
-"|" {return OR;}
+"&" {return BITAND;}
+"|" {return BITOR;}
 "<" {return LT;}
 ">" {return GT;}
 "<=" {return LE;}
 ">=" {return GE;}
 "==" {return EQ;}
 "!=" {return NEQ;}
+"++" {return SPLUS;}
+"--" {return SMINUS;}
+"||" {return OR;}
+"&&" {return AND;}
 
 [a-z|A-Z]+[a-z|A-Z|0-9|_]* {
     yylval.sval = yytext;

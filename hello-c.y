@@ -23,6 +23,7 @@ void yyerror(char * s) {
     char cval;
     A_globalDec dec;
     A_globalDecList declist;
+    A_var var;
     A_exp exp;
     A_expList explist;
     A_stm stm;
@@ -30,6 +31,13 @@ void yyerror(char * s) {
     A_tyDec tydec;
     A_tyDecList tydeclist;
 }
+
+%right ASSIGN
+%nonassoc LT GT LE GE EQ NEQ 
+%left PLUS MINUS
+%left TIMES DIVIDE
+%left SPLUS SMINUS
+%left BITAND BITOR
 
 %token <sval> ID
 %token <ival> INT
@@ -39,13 +47,16 @@ void yyerror(char * s) {
 %token
 WHILE BREAK CONTINUE IF ELSE RETURN STRUCT
 COMMA COLON SEMICOLON LPAREN RPAREN LBRACK RBRACK LBRACE RBRACE DOT 
-PLUS MINUS TIMES DIVIDE NOT AND OR ASSIGN LT GT
-EQ NEQ LE GE 
+// PLUS MINUS TIMES DIVIDE NOT AND OR ASSIGN LT GT
+NOT AND OR SPLUS SMINUS
+// EQ NEQ LE GE 
 
-%type <exp> exp callexp constexp
-%type <explist> explist
+
+%type <exp> exp arrayexp callexp constexp singexp doublexp
+%type <explist> explist arrayexplist
 %type <dec> dec
 %type <declist> declist
+%type <var> var
 %type <stm> stm assignstm whilestm ifstm
 %type <stmlist> stmlist
 %type <tydec> tydec
@@ -79,8 +90,7 @@ stmlist:    stm { $$ = A_StmList($1, NULL); }
         |   stm stmlist { $$ = A_StmList($1, $2); }
 ;
 
-stm:    { $$ = NULL; }
-    |   tydec SEMICOLON { $$ = A_DecStm(yylineno, $1); }
+stm:    tydec SEMICOLON { $$ = A_DecStm(yylineno, $1); }
     |   assignstm SEMICOLON { $$ = $1; }
     |   whilestm { $$ = $1; }
     |   ifstm { $$ = $1; }
@@ -90,6 +100,8 @@ stm:    { $$ = NULL; }
 ;
 
 exp:    constexp { $$ = $1; }
+    |   singexp { $$ = $1; }
+    |   doublexp { $$ = $1; }
     |   callexp { $$ = $1; }
 ;
 
@@ -103,11 +115,48 @@ callexp:    ID LPAREN explist RPAREN { $$ = A_Call(yylineno, S_Symbol($1), $3); 
 constexp:   CHAR { $$ = A_Char(yylineno, $1); }
         |   INT { $$ = A_Int(yylineno, $1); }
         |   FLOAT { $$ = A_Float(yylineno, $1); }
+        |   var { $$ = A_VarExp(yylineno, $1); }
+;
 
-assignstm:  ID ASSIGN exp { $$ = A_AssignStm(yylineno, $1, $3); }
+singexp:    exp SPLUS { $$ = A_SingleExp(yylineno, A_SPLUS, $1); }
+        |   exp SMINUS { $$ = A_SingleExp(yylineno, A_SMINUS, $1); }
+        |   NOT exp { $$ = A_SingleExp(yylineno, A_NOT, $2); }
+        |   MINUS exp { $$ = A_SingleExp(yylineno, A_NEGATIVE, $2); }
+        |   PLUS exp { $$ = A_SingleExp(yylineno, A_POSITIVE, $2); }
+;
+
+doublexp:   exp PLUS exp { $$ = A_DoubleExp(yylineno, A_PLUS, $1, $3); }
+        |   exp MINUS exp { $$ = A_DoubleExp(yylineno, A_MINUS, $1, $3); }
+        |   exp TIMES exp { $$ = A_DoubleExp(yylineno, A_TIMES, $1, $3); }
+        |   exp DIVIDE exp { $$ = A_DoubleExp(yylineno, A_DIVIDE, $1, $3); }
+        |   exp EQ exp { $$ = A_DoubleExp(yylineno, A_EQ, $1, $3); }
+        |   exp NEQ exp { $$ = A_DoubleExp(yylineno, A_NEQ, $1, $3); }
+        |   exp GT exp { $$ = A_DoubleExp(yylineno, A_GT, $1, $3); }
+        |   exp GE exp { $$ = A_DoubleExp(yylineno, A_GE, $1, $3); }
+        |   exp LT exp { $$ = A_DoubleExp(yylineno, A_LT, $1, $3); }
+        |   exp LE exp { $$ = A_DoubleExp(yylineno, A_LE, $1, $3); }
+        |   exp AND exp { $$ = A_DoubleExp(yylineno, A_AND, $1, $3); }
+        |   exp OR exp { $$ = A_DoubleExp(yylineno, A_OR, $1, $3); }
+        |   exp BITAND exp { $$ = A_DoubleExp(yylineno, A_BITAND, $1, $3); }
+        |   exp BITOR exp { $$ = A_DoubleExp(yylineno, A_BITOR, $1, $3); }
+;
+
+assignstm:  var ASSIGN exp { $$ = A_AssignStm(yylineno, $1, $3); }
 ;
 
 whilestm:   WHILE LPAREN exp RPAREN LBRACE stmlist RBRACE { $$ = A_WhileStm(yylineno, $3, $6); }
+;
+
+arrayexp:   LBRACK exp RBRACK { $$ = $2; }
+;
+
+arrayexplist:   arrayexp { $$ = A_ExpList($1, NULL); }
+            |   arrayexp arrayexplist { $$ = A_ExpList($1, $2); }
+;
+
+var:    ID { $$ = A_SymbolVar(yylineno, S_Symbol($1)); }
+    |   ID DOT ID { $$ = A_StructVar(yylineno, S_Symbol($1), S_Symbol($3)); }
+    |   ID arrayexplist { $$ = A_ArrayVar(yylineno, S_Symbol($1), $2); }
 ;
 
 ifstm:  IF LPAREN exp RPAREN LBRACE

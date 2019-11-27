@@ -19,7 +19,7 @@ A_globalDec A_Fun(A_line linno, S_symbol ret, S_symbol name, A_tyDecList para, A
 
 A_tyDec A_Var(A_line linno, S_symbol type, S_symbol name) {
     A_tyDec tydec = checked_malloc(sizeof(*tydec));
-    tydec->kind = A_VAR;
+    tydec->kind = A_VAR_DEC;
     tydec->linno = linno;
     tydec->u.var.type = type;
     tydec->u.var.name = name;
@@ -35,7 +35,33 @@ A_globalDec A_Struct(A_line linno, S_symbol name, A_tyDecList declist) {
     return tydec;
 }
 
-A_stm A_AssignStm(A_line linno, string field, A_exp exp) {
+A_var A_SymbolVar(A_line linno, S_symbol symbol) {
+    A_var var = checked_malloc(sizeof(*var));
+    var->linno = linno;
+    var->kind = A_SYMBOL_VAR;
+    var->u.symbol = symbol;
+    return var;
+}
+
+A_var A_ArrayVar(A_line linno, S_symbol symbol, A_expList explist) {
+    A_var var = checked_malloc(sizeof(*var));
+    var->linno = linno;
+    var->kind = A_ARRAY_VAR;
+    var->u.arrayvar.symbol = symbol;
+    var->u.arrayvar.exp = explist;
+    return var;
+}
+
+A_var A_StructVar(A_line linno, S_symbol para, S_symbol child) {
+    A_var var = checked_malloc(sizeof(*var));
+    var->linno = linno;
+    var->kind = A_STRUCT_VAR;
+    var->u.structvar.para = para;
+    var->u.structvar.child = child;
+    return var;
+}
+
+A_stm A_AssignStm(A_line linno, A_var field, A_exp exp) {
     A_stm assign = checked_malloc(sizeof(*exp));
     assign->linno = linno;
     assign->kind = A_ASSIGN_STM;
@@ -102,6 +128,25 @@ A_exp A_Call(A_line linno, S_symbol name, A_expList para) {
     return exp;
 }
 
+A_exp A_SingleExp(A_line linno, sop sop, A_exp exp) {
+    A_exp singexp = checked_malloc(sizeof(*singexp));
+    singexp->linno = linno;
+    singexp->kind = A_SINGLE_EXP;
+    singexp->u.singexp.op = sop;
+    singexp->u.singexp.exp = exp;
+    return singexp;
+}
+
+A_exp A_DoubleExp(A_line linno, dop dop, A_exp leftExp, A_exp rightExp) {
+    A_exp doublexp = checked_malloc(sizeof(*doublexp));
+    doublexp->linno = linno;
+    doublexp->kind = A_DOUBLE_EXP;
+    doublexp->u.doublexp.op = dop;
+    doublexp->u.doublexp.left = leftExp;
+    doublexp->u.doublexp.right = rightExp;
+    return doublexp;
+}
+
 A_exp A_Char(A_line linnno, char chr) {
     A_exp exp = checked_malloc(sizeof(*exp));
     exp->linno = linnno;
@@ -126,5 +171,14 @@ A_exp A_Float(A_line linno, float fnum) {
     exp->kind = A_CONST;
     exp->u.cons.kind = A_FLOAT;
     exp->u.cons.u.fnum = fnum;
+    return exp;
+}
+
+A_exp A_VarExp(A_line linno, A_var var) {
+    A_exp exp = checked_malloc(sizeof(*exp));
+    exp->linno = linno;
+    exp->kind = A_CONST;
+    exp->u.cons.kind = A_VAR;
+    exp->u.cons.u.var = var;
     return exp;
 }
