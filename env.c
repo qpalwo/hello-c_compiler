@@ -3,7 +3,7 @@
 #include "symbol.h"
 #include "env.h"
 
-S_table E_BaseFunTable() {
+S_table E_BaseVarTable() {
     S_table table = S_NewTable();
     return table;
 }

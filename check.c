@@ -103,7 +103,7 @@ void checkGlobalDec(A_globalDec globalDec, S_table venv, S_table tenv) {
 
 void checkGlobalDecList(A_globalDecList list) {
     while (list && list->head) {
-        checkGlobalDec(list->head, E_BaseFunTable(), E_BaseTypeTable());
+        checkGlobalDec(list->head, E_BaseVarTable(), E_BaseTypeTable());
         list = list->tail;
     }
 }

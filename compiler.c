@@ -6,6 +6,7 @@
 #include "symbol.h"
 #include "absyn.h"
 #include "astprinter.h"
+#include "check.h"
 
 extern FILE *yyin;
 extern int yyparse(void);
@@ -17,6 +18,7 @@ extern int rootnull;
 extern void printSymbol(FILE * out, int index);
 int printWord = 0;
 int pAST = 0;
+int checkAST = 0;
 
 void parse(string fileName) {
     yyin = fopen(fileName, "r");
@@ -29,7 +31,7 @@ void parse(string fileName) {
 
 int main(int argc, char **argv) {
     int opt;
-    string option = "wdhpf:t";
+    string option = "cwdhpf:t";
     string filePath = NULL;
     while ((opt = getopt(argc, argv, option)) != -1) {
         if (opt == 'h') {
@@ -54,6 +56,9 @@ int main(int argc, char **argv) {
         if (opt == 'p') {
             pAST = 1;
         }
+        if (opt == 'c') {
+            checkAST = 1;
+        }
     }
     if (!filePath) {
         printf("-f MUST BE ASSIGNED");
@@ -72,6 +77,9 @@ int main(int argc, char **argv) {
     parse(filePath);
     if (pAST) {
         printAST(stdout, absyn_root);
+    }
+    if (checkAST) {
+        checkGlobalDecList(absyn_root);
     }
     return 0;
 }

@@ -49,8 +49,9 @@ void * TB_Pop(TB_table table) {
 void * TB_Find(TB_table table, void * key) {
     assert(table && key);
     int index = ((unsigned) key) % TABLE_SIZE;
-    for (node n = table->table[index]; n && n->key != key; n = n->next) {
-        return n->value;
+    for (node n = table->table[index]; n && n->key; n = n->next) {
+        if (key == n->key)
+            return n->value;
     }
     return NULL;
 }

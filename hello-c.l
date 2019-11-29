@@ -65,7 +65,7 @@ return  {return RETURN;}
 "&&" {return AND;}
 
 [a-z|A-Z]+[a-z|A-Z|0-9|_]* {
-    yylval.sval = yytext;
+    yylval.sval = strdup(yytext);
     return ID;
 }
 
