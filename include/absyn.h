@@ -37,7 +37,6 @@ struct A_globalDec_ {
     A_line linno;
     union {
         struct {
-            A_line linno;
             S_symbol ret;
             S_symbol name;
             A_tyDecList para;

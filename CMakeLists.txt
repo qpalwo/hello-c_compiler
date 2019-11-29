@@ -21,6 +21,7 @@ set(
 	table.c
 	check.c
 	env.c
+	type.c
 )
 
 find_package(LLVM REQUIRED CONFIG)

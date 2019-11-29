@@ -1,4 +1,5 @@
 int a;
+int b;
 
 int fun () {
     int a;

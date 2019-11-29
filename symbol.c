@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "util.h"
+#include "type.h"
 #include "table.h"
 #include "symbol.h"
 
@@ -11,6 +12,7 @@ struct S_symbol_ {
 
 static S_symbol mksymbol(string name, S_symbol next) {
     S_symbol s = checked_malloc(sizeof(*s));
+    // strcpy(s->name, name);
     s->name = name; 
     s->next = next;
     return s;

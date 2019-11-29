@@ -9,7 +9,7 @@ LIST_FUN(tyDec, TyDec)
 
 A_globalDec A_Fun(A_line linno, S_symbol ret, S_symbol name, A_tyDecList para, A_stmList body) {
     A_globalDec fun = checked_malloc(sizeof(*fun));
-    fun->u.fun.linno = linno;
+    fun->linno = linno;
     fun->u.fun.ret = ret;
     fun->u.fun.name = name;
     fun->u.fun.para = para;
