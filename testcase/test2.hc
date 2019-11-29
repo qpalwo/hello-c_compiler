@@ -1,3 +1,5 @@
+int a;
+
 int fun () {
     int a;
     int [1][2] v;

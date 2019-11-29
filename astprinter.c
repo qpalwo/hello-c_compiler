@@ -38,7 +38,7 @@ void printExpList(FILE * out, A_expList root, int deepth) {
     if (!root)
         return;
     indent(out, deepth + 1);
-    fprintf(out, "typeDecList\n");
+    fprintf(out, "expList\n");
     while (root && root->head) {
         printExp(out, root->head, deepth + 1);
         root = root->tail;
@@ -152,6 +152,9 @@ void printGlobalDec(FILE * out, A_globalDec dec, int deepth) {
         case A_STRUCT:
             fprintf(out, "globalStructDec\n");
             printTypeDecList(out, dec->u.struc.declist, deepth + 1);
+            break;
+        case A_GLOBAL_VAR:
+            fprintf(out, "globalVarDec\n");
             break;
     }
 }

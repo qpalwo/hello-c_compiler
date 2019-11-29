@@ -18,6 +18,9 @@ set(
 	compiler.c
 	symbol.c
 	astprinter.c
+	table.c
+	check.c
+	env.c
 )
 
 find_package(LLVM REQUIRED CONFIG)

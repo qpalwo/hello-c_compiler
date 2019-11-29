@@ -33,7 +33,7 @@ LIST_DEFINE(globalDec, GlobalDec)
 LIST_DEFINE(tyDec, TyDec)
 
 struct A_globalDec_ {
-    enum { A_FUN, A_STRUCT } kind;
+    enum { A_FUN, A_STRUCT, A_GLOBAL_VAR } kind;
     A_line linno;
     union {
         struct {
@@ -47,6 +47,10 @@ struct A_globalDec_ {
             S_symbol name;
             A_tyDecList declist;
         } struc;
+        struct {
+            S_symbol name;
+            S_symbol type;
+        } var;
     } u;
 };
 
@@ -137,6 +141,8 @@ struct A_stm_ {
 A_globalDec A_Fun(A_line, S_symbol, S_symbol, A_tyDecList, A_stmList);
 
 A_globalDec A_Struct(A_line, S_symbol, A_tyDecList);
+
+A_globalDec A_GlobalVar(A_line, S_symbol, S_symbol);
 
 A_tyDec A_VarDec(A_line, S_symbol, S_symbol);
 

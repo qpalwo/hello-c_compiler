@@ -45,6 +45,15 @@ A_globalDec A_Struct(A_line linno, S_symbol name, A_tyDecList declist) {
     return tydec;
 }
 
+A_globalDec A_GlobalVar(A_line linno, S_symbol type, S_symbol name) {
+    A_globalDec vardec = checked_malloc(sizeof(*vardec));
+    vardec->kind = A_GLOBAL_VAR;
+    vardec->linno = linno;
+    vardec->u.var.name = name;
+    vardec->u.var.type = type;
+    return vardec;
+}
+
 A_var A_SymbolVar(A_line linno, S_symbol symbol) {
     A_var var = checked_malloc(sizeof(*var));
     var->linno = linno;

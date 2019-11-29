@@ -82,6 +82,7 @@ declist:    dec { $$ = A_GlobalDecList($1, NULL); }
 
 dec:    ID ID LPAREN tydeclist RPAREN LBRACE stmlist RBRACE { $$ = A_Fun(yylineno, S_Symbol($1), S_Symbol($2), $4, $7); }
     |   STRUCT ID LBRACE tydeclist RBRACE { $$ = A_Struct(yylineno, S_Symbol($2), $4); }
+    |   ID ID SEMICOLON { $$ = A_GlobalVar(yylineno, S_Symbol($1), S_Symbol($2)); }
 ;
 
 tydeclist:  tydec { $$ = A_TyDecList($1, NULL); }
