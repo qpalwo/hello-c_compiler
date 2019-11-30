@@ -36,7 +36,7 @@ static int streq(string a, string b) {
     return !strcmp(a,b);
 }
 
-S_symbol S_Symbol(string name) {
+S_symbol S_Symbol(const string name) {
     int index= hash(name) % SIZE;
     S_symbol syms = hashtable[index], sym;
     for(sym=syms; sym; sym=sym->next) {
@@ -49,7 +49,7 @@ S_symbol S_Symbol(string name) {
     return sym;
 }
  
-string S_name(S_symbol sym) {
+string S_Name(S_symbol sym) {
     return sym->name;
 }
 
