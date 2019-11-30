@@ -1,16 +1,27 @@
-int a;
+int hh;
 int b;
 
-int fun () {
+struct A {
+    int c
+}
+
+A fun1() {
+    ;
+}
+
+int fun (int ee, char c) {
+    A d;
     int a;
+    float e;
     int [1][2] v;
+    v[1 + 3 * a][3] = 10;
+    d = fun1();
     a = fun(1, '2');
-    a = 1.1;
+    e = 1.1;
     a = a++;
-    a = A + 1;
+    a = a + 1;
     c = 'a';
-    a.c = 5 + 5;
-    a[1 + 3 * a][3] = 10;
+    d.c = 5 + 5;
     while (1) {
         ;
     }

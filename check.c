@@ -72,6 +72,15 @@ TY_entry C_checkVar(A_var var, S_table venv, S_table tenv) {
             if (!arrayentry) {
                 ErrorMsg(var->linno, "no var %s defined", S_Name(var->u.arrayvar.symbol));
             }
+            A_expList arrexp = var->u.arrayvar.exp;
+            int level = 0;
+            while (arrexp) {
+                level++;
+                arrexp = arrexp->tail;
+            }
+            if (arrayentry && arrayentry->kind == TY_ARRAY && level == arrayentry->u.array.level) {
+                return arrayentry->u.array.type;
+            }
             return arrayentry;
         }
         case A_STRUCT_VAR: {
@@ -102,14 +111,25 @@ TY_entry C_checkDec(A_tyDec dec, S_symbol *name, S_table venv, S_table tenv) {
                 ErrorMsg(dec->linno, "unexpect type %s", S_Name(dec->u.var.type));
             }
             if (name) {
-                S_Enter(tenv, appendSymbol(*name, dec->u.var.name, PUNC), var);
+                S_symbol type = appendSymbol(*name, dec->u.var.name, PUNC);
+                if (S_Find(tenv, type)) {
+                    ErrorMsg(dec->linno, "duplicate struct field define %s", S_Name(dec->u.var.name));
+                }
+                S_Enter(tenv, type, var);
                 name = &dec->u.var.name;
             } else {
-                S_Enter(venv, dec->u.var.name, var);
+                if (!S_Find(venv, dec->u.var.name)) {
+                    S_Enter(venv, dec->u.var.name, var);
+                } else {
+                    ErrorMsg(dec->linno, "duplicate var dec %s", S_Name(dec->u.var.name));
+                }
             }
             return var;
         }
         case A_ARRAY_DEC: {
+            if (S_Find(venv, dec->u.array.name)) {
+                ErrorMsg(dec->linno, "duplicate array var %s", S_Name(dec->u.array.type));
+            }
             TY_entry array = S_Find(tenv, dec->u.array.type);
             if (!array) {
                 ErrorMsg(dec->linno, "unexpect array type %s", S_Name(dec->u.array.type));
@@ -165,7 +185,7 @@ TY_entry C_checkExp(A_exp exp, S_table venv, S_table tenv) {
                 callpara = callpara->tail;
                 funpara = funpara->tail;
             }
-            if (!callpara || !funpara) {
+            if (callpara || funpara) {
                 ErrorMsg(exp->linno, "call para count not match");
             }
             return funent->u.fun.ret;
@@ -299,6 +319,10 @@ void C_checkStm(A_stm stm, S_table venv, S_table tenv) {
 void C_checkGlobalDec(A_globalDec globalDec, S_table venv, S_table tenv) {
     switch (globalDec->kind) {
         case A_FUN: {
+            TY_entry entry = S_Find(venv, globalDec->u.fun.name);
+            if (entry) {
+                ErrorMsg(globalDec->linno, "duplicate global fun dec %s", S_Name(globalDec->u.fun.name));
+            }
             S_BeginScope(tenv);
             S_BeginScope(venv);
             TY_entry ret = S_Find(tenv, globalDec->u.fun.ret);
@@ -306,7 +330,7 @@ void C_checkGlobalDec(A_globalDec globalDec, S_table venv, S_table tenv) {
                 ErrorMsg(globalDec->linno, "unexpect function return type");
             }
             TY_entryList paraList = NULL;
-            if (globalDec->u.fun.para) {
+            if (globalDec->u.fun.para && globalDec->u.fun.para->head->kind != A_NULL_DEC) {
                 A_tyDecList paras = globalDec->u.fun.para;
                 while (paras && paras->head) {
                     TY_entry funPara = C_checkDec(paras->head, NULL, venv, tenv);
@@ -318,7 +342,18 @@ void C_checkGlobalDec(A_globalDec globalDec, S_table venv, S_table tenv) {
                     paras = paras->tail;
                 }
             }
-            S_Enter(venv, globalDec->u.fun.name, TY_Fun(ret, paraList));
+            // revert list to keep paralist order
+            TY_entryList revertParaList = paraList;
+            if (paraList) {
+                paraList = paraList->tail;
+                revertParaList->tail = NULL;
+                while (paraList) {
+                    revertParaList = TY_EntryList(paraList->head, revertParaList);
+                    paraList = paraList->tail;
+                }
+            }
+            TY_entry funentry = TY_Fun(ret, revertParaList);
+            S_Enter(venv, globalDec->u.fun.name, funentry);
             A_stmList list = globalDec->u.fun.body;
             while (list && list->head) {
                 C_checkStm(list->head, venv, tenv);
@@ -326,10 +361,15 @@ void C_checkGlobalDec(A_globalDec globalDec, S_table venv, S_table tenv) {
             }
             S_EndScope(venv);
             S_EndScope(tenv);
+            S_Enter(venv, globalDec->u.fun.name, funentry);
             break;
         }
         case A_STRUCT: {
             TY_structDataList strList = NULL;
+            TY_entry entry = S_Find(tenv, globalDec->u.struc.name);
+            if (entry) {
+                ErrorMsg(globalDec->linno, "duplicate global struct dec %s", S_Name(globalDec->u.struc.name));
+            }
             A_tyDecList declist = globalDec->u.struc.declist;
             while (declist && declist->head) {
                 S_symbol *para = &globalDec->u.struc.name;
@@ -345,7 +385,11 @@ void C_checkGlobalDec(A_globalDec globalDec, S_table venv, S_table tenv) {
             break;
         }
         case A_GLOBAL_VAR: {
-            TY_entry entry = S_Find(tenv, globalDec->u.var.type);
+            TY_entry entry = S_Find(venv, globalDec->u.var.name);
+            if (entry) {
+                ErrorMsg(globalDec->linno, "duplicate global dec %s", S_Name(globalDec->u.var.name));
+            }
+            entry = S_Find(tenv, globalDec->u.var.type);
             if (!entry) {
                 ErrorMsg(globalDec->linno, "unexpect global dec type");
             }
@@ -357,8 +401,10 @@ void C_checkGlobalDec(A_globalDec globalDec, S_table venv, S_table tenv) {
 
 
 void C_checkGlobalDecList(A_globalDecList list) {
+    S_table venv = E_BaseVarTable();
+    S_table tenv = E_BaseTypeTable();
     while (list && list->head) {
-        C_checkGlobalDec(list->head, E_BaseVarTable(), E_BaseTypeTable());
+        C_checkGlobalDec(list->head, venv, tenv);
         list = list->tail;
     }
 }

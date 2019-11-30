@@ -115,6 +115,7 @@ exp:    constexp { $$ = $1; }
 
 explist:    exp { $$ = A_ExpList($1, NULL); }
         |   exp COMMA explist { $$ = A_ExpList($1, $3); }
+        |   { $$ = NULL; }
 ;
 
 callexp:    ID LPAREN explist RPAREN { $$ = A_Call(yylineno, S_Symbol($1), $3); }
