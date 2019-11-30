@@ -54,7 +54,7 @@ struct A_globalDec_ {
 };
 
 struct A_tyDec_ {
-    enum { A_VAR_DEC, A_ARRAY_DEC } kind;
+    enum { A_VAR_DEC, A_ARRAY_DEC, A_NULL_DEC } kind;
     A_line linno;
     union {
         struct {
@@ -146,6 +146,8 @@ A_globalDec A_GlobalVar(A_line, S_symbol, S_symbol);
 A_tyDec A_VarDec(A_line, S_symbol, S_symbol);
 
 A_tyDec A_ArrayDec(A_line, S_symbol, S_symbol, A_expList);
+
+A_tyDec A_NullDec(A_line);
 
 A_var A_SymbolVar(A_line, S_symbol);
 

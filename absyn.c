@@ -36,6 +36,13 @@ A_tyDec A_ArrayDec(A_line linno, S_symbol type, S_symbol name, A_expList exp) {
     return tydec;
 }
 
+A_tyDec A_NullDec(A_line linno) {
+    A_tyDec tydec = checked_malloc(sizeof(*tydec));
+    tydec->kind = A_NULL_DEC;
+    tydec->linno = linno;
+    return tydec;
+}
+
 A_globalDec A_Struct(A_line linno, S_symbol name, A_tyDecList declist) {
     A_globalDec tydec = checked_malloc(sizeof(*tydec));
     tydec->kind = A_STRUCT;

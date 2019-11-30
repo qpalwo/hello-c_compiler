@@ -91,7 +91,7 @@ tydeclist:  tydec { $$ = A_TyDecList($1, NULL); }
 
 tydec:  ID ID { $$ = A_VarDec(yylineno, S_Symbol($1), S_Symbol($2)); }
     |   ID arrayexplist ID { $$ = A_ArrayDec(yylineno, S_Symbol($1), S_Symbol($3), $2); }
-    |   { $$ = NULL; }
+    |   { $$ = A_NullDec(yylineno); }
 ;
 
 stmlist:    stm { $$ = A_StmList($1, NULL); }

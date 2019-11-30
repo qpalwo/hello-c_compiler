@@ -35,9 +35,9 @@ bool sameTy(TY_entry one, TY_entry other) {
         case TY_FLOAT:
         case TY_CHAR:
             return TRUE;
-        case TY_ARRAY: 
-            return sameTy(one->u.array.type, other->u.array.type) 
-            && one->u.array.level == other->u.array.level;
+        case TY_ARRAY:
+            return sameTy(one->u.array.type, other->u.array.type)
+                   && one->u.array.level == other->u.array.level;
         case TY_STRUCT: {
             return one == other;
             // TY_structDataList onelist = one->u.struc.sdl;
@@ -52,13 +52,13 @@ bool sameTy(TY_entry one, TY_entry other) {
             // }
             // return TRUE;
         }
-        case TY_FUN: 
+        case TY_FUN:
             return sameTy(one->u.fun.ret, other->u.fun.ret);
     }
 
 }
 
-TY_entry checkVar(A_var var, S_table venv, S_table tenv) {
+TY_entry C_checkVar(A_var var, S_table venv, S_table tenv) {
     switch (var->kind) {
         case A_SYMBOL_VAR: {
             TY_entry varentry = S_Find(venv, var->u.symbol);
@@ -86,14 +86,15 @@ TY_entry checkVar(A_var var, S_table venv, S_table tenv) {
             }
             TY_entry child = S_Find(tenv, appendSymbol(parent->u.struc.sname, var->u.structvar.child, PUNC));
             if (!child) {
-                ErrorMsg(var->linno, "%s is not a field of struct %s", S_Name(var->u.structvar.child), S_Name(parent->u.struc.sname));
+                ErrorMsg(var->linno, "%s is not a field of struct %s", S_Name(var->u.structvar.child),
+                         S_Name(parent->u.struc.sname));
             }
             return child;
         }
     }
 }
 
-TY_entry checkDec(A_tyDec dec, S_symbol * name, S_table venv, S_table tenv) {
+TY_entry C_checkDec(A_tyDec dec, S_symbol *name, S_table venv, S_table tenv) {
     switch (dec->kind) {
         case A_VAR_DEC: {
             TY_entry var = S_Find(tenv, dec->u.var.type);
@@ -123,21 +124,121 @@ TY_entry checkDec(A_tyDec dec, S_symbol * name, S_table venv, S_table tenv) {
             S_Enter(venv, dec->u.array.name, actTy);
             return actTy;
         }
+        case A_NULL_DEC:
+            return TY_Void();
     }
 }
 
-TY_entry checkExp(A_exp exp, S_table venv, S_table tenv) {
+TY_entry C_checkExp(A_exp exp, S_table venv, S_table tenv) {
     switch (exp->kind) {
-
+        case A_CONST: {
+            switch (exp->u.cons.kind) {
+                case A_INT:
+                    return TY_Int();
+                case A_CHAR:
+                    return TY_Char();
+                case A_FLOAT:
+                    return TY_Float();
+                case A_VAR:
+                    return C_checkVar(exp->u.cons.u.var, venv, tenv);
+            }
+        }
+        case A_CALL: {
+            TY_entry funent = S_Find(venv, exp->u.call.name);
+            if (!funent || funent->kind != TY_FUN) {
+                ErrorMsg(exp->linno, "no function %s defined", S_Name(exp->u.call.name));
+                return NULL;
+            }
+            A_expList callpara = exp->u.call.para;
+            TY_entryList funpara = funent->u.fun.para;
+            while (callpara && callpara->head
+                   && funpara && funpara->head) {
+                TY_entry paraent = C_checkExp(callpara->head, venv, tenv);
+                if (!paraent) {
+                    ErrorMsg(exp->linno, "call para exp error");
+                    break;
+                }
+                if (!sameTy(paraent, funpara->head)) {
+                    ErrorMsg(exp->linno, "call para type not match");
+                    break;
+                }
+                callpara = callpara->tail;
+                funpara = funpara->tail;
+            }
+            if (!callpara || !funpara) {
+                ErrorMsg(exp->linno, "call para count not match");
+            }
+            return funent->u.fun.ret;
+        }
+        case A_DOUBLE_EXP: {
+            TY_entry leftentry = C_checkExp(exp->u.doublexp.left, venv, tenv);
+            TY_entry rightentry = C_checkExp(exp->u.doublexp.right, venv, tenv);
+            if (!leftentry || !rightentry) {
+                ErrorMsg(exp->linno, "exp error"); 
+                return NULL;
+            }
+            if (leftentry->kind != TY_INT && leftentry->kind != TY_CHAR && leftentry->kind != TY_FLOAT
+                && rightentry->kind != TY_INT && rightentry->kind != TY_CHAR && rightentry->kind != TY_FLOAT) {
+                ErrorMsg(exp->linno, "algorithmic exp type error");
+            }
+            switch (exp->u.doublexp.op) {
+                case A_PLUS:
+                case A_MINUS:
+                case A_TIMES:
+                case A_DIVIDE:
+                    if (leftentry->kind == TY_FLOAT || rightentry->kind == TY_FLOAT) {
+                        return TY_Float();
+                    } else if (leftentry->kind == TY_INT || rightentry->kind == TY_INT) {
+                        return TY_Int();
+                    } else {
+                        return TY_Char();
+                    }
+                case A_EQ:
+                case A_NEQ:
+                case A_GT:
+                case A_GE:
+                case A_LT:
+                case A_LE:
+                    return TY_Int();
+                case A_BITAND:
+                case A_BITOR:
+                case A_AND:
+                case A_OR:
+                    if (leftentry->kind == TY_FLOAT || rightentry->kind == TY_FLOAT) {
+                        ErrorMsg(exp->linno, "logic algo exp can not has float type");
+                        return TY_Int();
+                    } else if (leftentry->kind == TY_INT || rightentry->kind == TY_INT) {
+                        return TY_Int();
+                    } else {
+                        return TY_Char();
+                    }
+            }
+        }
+        case A_SINGLE_EXP: {
+            TY_entry expentry = C_checkExp(exp->u.singexp.exp, venv, tenv);
+            if (!expentry) {
+                ErrorMsg(exp->linno, "exp error"); 
+            }
+            if (expentry->kind != TY_INT && expentry->kind != TY_CHAR) {
+                ErrorMsg(exp->linno, "algorithmic exp type error"); 
+            }
+            switch (exp->u.singexp.op) {
+                case A_SPLUS:
+                case A_SMINUS:
+                case A_NEGATIVE:
+                case A_POSITIVE:
+                case A_NOT:
+                    return expentry;
+            }
+        }
     }
-
 }
 
-void checkStm(A_stm stm, S_table venv, S_table tenv) {
+void C_checkStm(A_stm stm, S_table venv, S_table tenv) {
     switch (stm->kind) {
         case A_ASSIGN_STM: {
-            TY_entry value = checkVar(stm->u.assign.symbol, venv, tenv);
-            TY_entry expty = checkExp(stm->u.assign.exp, venv, tenv);
+            TY_entry value = C_checkVar(stm->u.assign.symbol, venv, tenv);
+            TY_entry expty = C_checkExp(stm->u.assign.exp, venv, tenv);
             if (!value || !expty) {
                 break;
             }
@@ -147,18 +248,18 @@ void checkStm(A_stm stm, S_table venv, S_table tenv) {
             break;
         }
         case A_DEC_STM: {
-            checkDec(stm->u.dec, NULL, venv, tenv);
+            C_checkDec(stm->u.dec, NULL, venv, tenv);
             break;
         }
         case A_IF_STM: {
-            TY_entry expty = checkExp(stm->u.iff.test, venv, tenv);
+            TY_entry expty = C_checkExp(stm->u.iff.test, venv, tenv);
             if (expty->kind != TY_INT && expty->kind != TY_CHAR) {
                 ErrorMsg(stm->linno, "unexpect if test exp type");
             }
             S_BeginScope(venv);
             A_stmList ifbody = stm->u.iff.iff;
             while (ifbody && ifbody->head) {
-                checkStm(ifbody->head, venv, tenv);
+                C_checkStm(ifbody->head, venv, tenv);
                 ifbody = ifbody->tail;
             }
             S_EndScope(venv);
@@ -166,7 +267,7 @@ void checkStm(A_stm stm, S_table venv, S_table tenv) {
                 A_stmList elsebody = stm->u.iff.elsee;
                 S_BeginScope(venv);
                 while (elsebody && elsebody->head) {
-                    checkStm(elsebody->head, venv, tenv);
+                    C_checkStm(elsebody->head, venv, tenv);
                     elsebody = elsebody->tail;
                 }
                 S_EndScope(venv);
@@ -174,14 +275,14 @@ void checkStm(A_stm stm, S_table venv, S_table tenv) {
             break;
         }
         case A_WHILE_STM: {
-            TY_entry expty = checkExp(stm->u.whilee.test, venv, tenv);
+            TY_entry expty = C_checkExp(stm->u.whilee.test, venv, tenv);
             if (expty->kind != TY_INT && expty->kind != TY_CHAR) {
                 ErrorMsg(stm->linno, "unexpect while test exp type");
             }
             S_BeginScope(venv);
             A_stmList whilebody = stm->u.whilee.whilee;
             while (whilebody && whilebody->head) {
-                checkStm(whilebody->head, venv, tenv);
+                C_checkStm(whilebody->head, venv, tenv);
                 whilebody = whilebody->tail;
             }
             break;
@@ -195,7 +296,7 @@ void checkStm(A_stm stm, S_table venv, S_table tenv) {
 
 }
 
-void checkGlobalDec(A_globalDec globalDec, S_table venv, S_table tenv) {
+void C_checkGlobalDec(A_globalDec globalDec, S_table venv, S_table tenv) {
     switch (globalDec->kind) {
         case A_FUN: {
             S_BeginScope(tenv);
@@ -208,18 +309,19 @@ void checkGlobalDec(A_globalDec globalDec, S_table venv, S_table tenv) {
             if (globalDec->u.fun.para) {
                 A_tyDecList paras = globalDec->u.fun.para;
                 while (paras && paras->head) {
-                    TY_entry funPara = checkDec(paras->head, NULL, venv, tenv);
+                    TY_entry funPara = C_checkDec(paras->head, NULL, venv, tenv);
                     if (!funPara) {
                         ErrorMsg(globalDec->linno, "unexpect function para type");
                     } else {
                         paraList = TY_EntryList(funPara, paraList);
                     }
+                    paras = paras->tail;
                 }
             }
             S_Enter(venv, globalDec->u.fun.name, TY_Fun(ret, paraList));
             A_stmList list = globalDec->u.fun.body;
             while (list && list->head) {
-                checkStm(list->head, venv, tenv);
+                C_checkStm(list->head, venv, tenv);
                 list = list->tail;
             }
             S_EndScope(venv);
@@ -230,13 +332,14 @@ void checkGlobalDec(A_globalDec globalDec, S_table venv, S_table tenv) {
             TY_structDataList strList = NULL;
             A_tyDecList declist = globalDec->u.struc.declist;
             while (declist && declist->head) {
-                S_symbol * para = &globalDec->u.struc.name;
-                TY_entry decs = checkDec(declist->head, para, tenv, tenv);
+                S_symbol *para = &globalDec->u.struc.name;
+                TY_entry decs = C_checkDec(declist->head, para, tenv, tenv);
                 if (!decs) {
                     ErrorMsg(globalDec->linno, "unexpect struct type");
                 } else {
                     strList = TY_StructDataList(TY_StructData(*para, decs), strList);
                 }
+                declist = declist->tail;
             }
             S_Enter(tenv, globalDec->u.struc.name, TY_Struct(globalDec->u.struc.name, strList));
             break;
@@ -253,9 +356,9 @@ void checkGlobalDec(A_globalDec globalDec, S_table venv, S_table tenv) {
 }
 
 
-void checkGlobalDecList(A_globalDecList list) {
+void C_checkGlobalDecList(A_globalDecList list) {
     while (list && list->head) {
-        checkGlobalDec(list->head, E_BaseVarTable(), E_BaseTypeTable());
+        C_checkGlobalDec(list->head, E_BaseVarTable(), E_BaseTypeTable());
         list = list->tail;
     }
 }

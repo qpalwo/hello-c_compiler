@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         printAST(stdout, absyn_root);
     }
     if (checkAST) {
-        checkGlobalDecList(absyn_root);
+        C_checkGlobalDecList(absyn_root);
     }
     return 0;
 }
