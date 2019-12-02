@@ -9,6 +9,21 @@
 #include "codegen.h"
 
 extern int CODEGEN_DEBUG;
+typedef struct CG_baseBlockList_ * CG_baseBlockList;
+
+LLVMBasicBlockRef CG_stmList(A_stmList stmList, LLVMModuleRef module, LLVMBuilderRef builder);
+
+struct CG_baseBlockList_ {
+    LLVMBasicBlockRef head;
+    CG_baseBlockList tail;
+};
+
+CG_baseBlockList CG_BaseBlockList(LLVMBasicBlockRef head, CG_baseBlockList tail) {
+    CG_baseBlockList list = checked_malloc(sizeof(*list));
+    list->head = head;
+    list->tail = tail;
+    return list;
+}
 
 static void CG_dumpModule(LLVMModuleRef module) {
     if (CODEGEN_DEBUG) {
@@ -69,6 +84,10 @@ LLVMTypeRef *CG_decList2TypeRef(A_tyDecList declist, int *count) {
     return body;
 }
 
+LLVMValueRef *CG_callExpList2Ref(A_expList expList, LLVMModuleRef module, LLVMBuilderRef builder, int *count) {
+
+}
+
 S_symbol TyDecName(A_tyDec dec) {
     switch (dec->kind) {
         case A_VAR_DEC: {
@@ -82,10 +101,70 @@ S_symbol TyDecName(A_tyDec dec) {
     }
 }
 
-LLVMValueRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder) {
+LLVMValueRef CG_singleExp(A_exp exp, sop op, LLVMModuleRef module, LLVMBuilderRef builder) {
+
+}
+
+LLVMValueRef CG_doubleExp(A_exp le, A_exp re, dop op, LLVMModuleRef module, LLVMBuilderRef builder) {
+
+}
+
+LLVMValueRef CG_var(A_var var, LLVMModuleRef module, LLVMBuilderRef builder) {
+
+}
+
+LLVMValueRef CG_exp(A_exp exp, LLVMModuleRef module, LLVMBuilderRef builder) {
+    switch (exp->kind) {
+        case A_CONST: {
+            switch (exp->u.cons.kind) {
+                case A_INT:
+                    return LLVMConstInt(LLVMInt32Type(), exp->u.cons.u.inum, FALSE);
+                case A_CHAR:
+                    return LLVMConstInt(LLVMInt8Type(), exp->u.cons.u.cnum, FALSE);
+                case A_FLOAT:
+                    return LLVMConstReal(LLVMFloatType(), exp->u.cons.u.fnum);
+                case A_VAR:
+                    return CG_var(exp->u.cons.u.var, module, builder);
+            }
+        }
+        case A_CALL: {
+            LLVMValueRef fun = S_Find(TYPE_TABLE, exp->u.call.name);
+            if (!fun) {
+                InternalError(exp->linno, "find call fun error");
+                return NULL;
+            }
+            int paraCount = 0;
+            LLVMValueRef * paras = CG_callExpList2Ref(exp->u.call.para, module, builder, &paraCount);
+            LLVMValueRef call = LLVMBuildCall(builder, fun, paras, paraCount, "");
+            if (!call) {
+                InternalError(exp->linno, "create call instrction error");
+                return NULL;
+            }
+            return call;
+        }
+        case A_DOUBLE_EXP: {
+            return CG_doubleExp(
+                exp->u.doublexp.left, exp->u.doublexp.right, exp->u.doublexp.op, module, builder);
+        }
+        case A_SINGLE_EXP: {
+            return CG_singleExp(exp->u.singexp.exp, exp->u.singexp.op, module, builder);
+        }
+    }
+}
+
+LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder) {
     switch(stm->kind) {
         case A_ASSIGN_STM: {
-
+            LLVMValueRef exp = CG_exp(stm->u.assign.exp, module, builder);
+            if (!exp) {
+                InternalError(stm->linno, "create assign stm exp error");
+            }
+            LLVMValueRef value = CG_var(stm->u.assign.symbol, module, builder);
+            if (!value) {
+                InternalError(stm->linno, "get assign stm value error");
+            }
+            LLVMBuildStore(builder, exp, value);
+            return NULL;
         }
         case A_DEC_STM: {
             LLVMTypeRef dectype = CG_dec2TypeRef(stm->u.dec);
@@ -95,9 +174,38 @@ LLVMValueRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder) {
             S_symbol name = TyDecName(stm->u.dec);
             LLVMValueRef dec = LLVMBuildAlloca(builder, dectype, S_Name(name));
             Label_NewDec(name, dec);
+            return NULL;
         }
         case A_IF_STM: {
+            LLVMValueRef fun = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+            LLVMValueRef cond = CG_exp(stm->u.iff.test, module, builder);
 
+            LLVMBasicBlockRef then = LLVMAppendBasicBlock(fun, Label_NewLabel("if.then"));
+            LLVMBasicBlockRef elsee = LLVMAppendBasicBlock(fun, Label_NewLabel("if.else"));
+            LLVMBasicBlockRef end = LLVMAppendBasicBlock(fun, Label_NewLabel("if.end"));
+            LLVMValueRef condins = LLVMBuildCondBr(builder, cond, then, elsee);
+            LLVMPositionBuilderAtEnd(builder, then);
+            Label_NewScope();
+            LLVMBasicBlockRef thenEndBlock = CG_stmList(stm->u.iff.iff, module, builder);
+            LLVMBuildBr(builder, end);
+            Label_EndScope();
+            LLVMPositionBuilderAtEnd(builder, elsee);
+            Label_NewScope();
+            LLVMBasicBlockRef elseEndBlock = CG_stmList(stm->u.iff.elsee, module, builder);
+            LLVMBuildBr(builder, end);
+            Label_EndScope();
+            // handle nested end block
+            if (thenEndBlock) {
+                LLVMPositionBuilderAtEnd(builder, thenEndBlock);
+                LLVMBuildBr(builder, end);
+            }
+            if (elseEndBlock) {
+                LLVMPositionBuilderAtEnd(builder, elseEndBlock);
+                LLVMBuildBr(builder, end);
+            }
+            // set builder pointer at next BaseBlock
+            LLVMPositionBuilderAtEnd(builder, end);
+            return end;
         }
         case A_WHILE_STM: {
 
@@ -106,7 +214,7 @@ LLVMValueRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder) {
 
         }
         case A_CONTINUE_STM: {
-            
+
         }
         case A_RETURN_STM: {
 
@@ -114,15 +222,27 @@ LLVMValueRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder) {
     }
 }
 
-LLVMValueRef CG_stmList(A_stmList stmList, LLVMModuleRef module, LLVMBuilderRef builder) {
-    LLVMValueRef fun = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
-    LLVMBasicBlockRef block = LLVMAppendBasicBlock(fun, Label_NewFun());
-    LLVMPositionBuilderAtEnd(builder, block);
+LLVMBasicBlockRef CG_stmList(A_stmList stmList, LLVMModuleRef module, LLVMBuilderRef builder) {
+    CG_baseBlockList endblock = NULL;
     while (stmList && stmList->head) {
-        CG_stm(stmList->head, module, builder);
+        LLVMBasicBlockRef end = CG_stm(stmList->head, module, builder);
+        if (end) {
+            endblock = CG_BaseBlockList(end, endblock);
+        }
         stmList = stmList->tail;
     }
-    return block;
+    // merge end block
+    if (endblock && endblock->head) {
+        LLVMValueRef fun = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+        LLVMBasicBlockRef endbb = LLVMAppendBasicBlock(fun, Label_NewLabel("end"));
+        while (endblock && endblock->head) {
+            LLVMPositionBuilderAtEnd(builder, endblock->head);
+            LLVMBuildBr(builder, endblock->head);
+        }
+        return endbb;
+    } else {
+        return NULL;
+    }
 }
 
 void CG_globalDec(A_globalDec globaldec, LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -145,12 +265,13 @@ void CG_globalDec(A_globalDec globaldec, LLVMModuleRef module, LLVMBuilderRef bu
                 InternalError(globaldec->linno, "create fun error");
                 return;
             }
-            LLVMValueRef body = CG_stmList(globaldec->u.fun.body, module, builder);
-            if (!body) {
-                InternalError(globaldec->linno, "error function");
-                LLVMDeleteFunction(fun);
+            LLVMBasicBlockRef block = LLVMAppendBasicBlock(fun, Label_NewFun());
+            LLVMPositionBuilderAtEnd(builder, block);
+            LLVMBasicBlockRef bodyend = CG_stmList(globaldec->u.fun.body, module, builder);
+            if (bodyend) {
+                LLVMPositionBuilderAtEnd(builder, bodyend);
             }
-            LLVMBuildRet(builder, fun);
+            LLVMBuildRetVoid(builder);
             if (LLVMVerifyFunction(fun, LLVMPrintMessageAction) == 1) {
                 InternalError(globaldec->linno, "error function");
                 LLVMDeleteFunction(fun);
