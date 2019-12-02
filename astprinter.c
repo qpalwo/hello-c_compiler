@@ -76,6 +76,8 @@ void printTypeDec(FILE * out, A_tyDec dec, int deepth) {
             fprintf(out, "arrayDec\n");
             printExpList(out, dec->u.array.exp, deepth + 1);
             break;
+        case A_NULL_DEC:
+            break;
     }
 }
 

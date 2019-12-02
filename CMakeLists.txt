@@ -13,15 +13,17 @@ set(
 
 set(
 	SOURCE_FILE_LIST
-	util.c
 	absyn.c
-	compiler.c
-	symbol.c
 	astprinter.c
-	table.c
 	check.c
+	codegen.c
+	compiler.c
 	env.c
+	label.c
+	symbol.c
+	table.c
 	type.c
+	util.c
 )
 
 find_package(LLVM REQUIRED CONFIG)
@@ -61,10 +63,14 @@ add_executable(
 # that we wish to use
 llvm_map_components_to_libnames(
 	llvm_libs 
-	support 
+	# support 
+	analysis
 	core 
-	irreader
+	# irreader
 	)
+
+	message(STATUS ${llvm_libs})
+
 
 # Link against LLVM libraries
 target_link_libraries(

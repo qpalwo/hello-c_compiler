@@ -19,7 +19,7 @@ string String(char *s) {
     return p;
 }
 
-void ErrorMsg(int pos, char *message,...) {
+void ErrorMsg(int pos, char * message,...) {
     va_list ap;
     fprintf(stderr,"line %d: ", pos);
     va_start(ap, message);

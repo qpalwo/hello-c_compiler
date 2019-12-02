@@ -5,6 +5,7 @@
 #include "util.h"
 #include "symbol.h"
 #include "absyn.h"
+#include "codegen.h"
 #include "astprinter.h"
 #include "check.h"
 
@@ -19,6 +20,7 @@ extern void printSymbol(FILE * out, int index);
 int printWord = 0;
 int pAST = 0;
 int checkAST = 0;
+int CODEGEN_DEBUG = 1;
 
 void parse(string fileName) {
     yyin = fopen(fileName, "r");
@@ -81,5 +83,6 @@ int main(int argc, char **argv) {
     if (checkAST) {
         C_checkGlobalDecList(absyn_root);
     }
+    CG_codeGen(absyn_root);
     return 0;
 }
