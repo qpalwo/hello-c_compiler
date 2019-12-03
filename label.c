@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,7 @@
 static string BBNAME = "<entry>";
 static string DEFAULT_LABEL = "<label>";
 static int labelTag = 0;
+static int level = 0;
 static S_table LOCAL_TABLE;
 
 string count2string(int count) {
@@ -22,10 +24,23 @@ string count2string(int count) {
     return s;
 }
 
-string Label_NewFun() {
-    labelTag = 0;
+void Label_InitTable() {
     LOCAL_TABLE = S_NewTable();
+}
+
+string Label_NewFun(S_symbol name, void * value) {
+    labelTag = 0;
+    assert(!level);
+    S_Enter(LOCAL_TABLE, name, value);
+    S_BeginScope(LOCAL_TABLE);
+    level++;
     return BBNAME;
+}
+
+void Label_EndFun() {
+    S_EndScope(LOCAL_TABLE);
+    level--;
+    assert(!level);
 }
 
 string Label_NewLabel(string prefix) {
@@ -52,10 +67,11 @@ void * Label_FindDec(S_symbol name) {
 }
 
 void Label_NewScope() {
+    level++;
     S_BeginScope(LOCAL_TABLE);
-    
 }
 
 void Label_EndScope() {
     S_EndScope(LOCAL_TABLE);
+    level--;
 }

@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include "util.h"
@@ -50,6 +51,7 @@ S_symbol S_Symbol(const string name) {
 }
  
 string S_Name(S_symbol sym) {
+    assert(sym);
     return sym->name;
 }
 
