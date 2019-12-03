@@ -102,7 +102,8 @@ stm:    tydec SEMICOLON { $$ = A_DecStm(yylineno, $1); }
     |   assignstm SEMICOLON { $$ = $1; }
     |   whilestm { $$ = $1; }
     |   ifstm { $$ = $1; }
-    |   BREAK SEMICOLON { $$ = A_BreakStm(yylineno);}
+    |   exp SEMICOLON { $$ = A_ExpStm(yylineno, $1); }
+    |   BREAK SEMICOLON { $$ = A_BreakStm(yylineno); }
     |   CONTINUE SEMICOLON { $$ = A_ContinueStm(yylineno); }
     |   RETURN exp SEMICOLON { $$ = A_ReturnStm(yylineno, $2); }
 ;

@@ -312,6 +312,8 @@ void C_checkStm(A_stm stm, S_table venv, S_table tenv) {
         case A_RETURN_STM:
             // break continue return 先不做检查
             break;
+        case A_EXP_STM:
+            break;
     }
 
 }

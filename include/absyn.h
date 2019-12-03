@@ -116,7 +116,7 @@ struct A_exp_ {
 
 struct A_stm_ {
     enum {A_ASSIGN_STM, A_DEC_STM, A_IF_STM, A_WHILE_STM, 
-    A_BREAK_STM, A_CONTINUE_STM, A_RETURN_STM } kind;
+    A_BREAK_STM, A_CONTINUE_STM, A_RETURN_STM, A_EXP_STM } kind;
     A_line linno;
     union {
         struct {
@@ -134,6 +134,7 @@ struct A_stm_ {
             A_stmList whilee;
         } whilee;
         A_exp returnn;
+        A_exp exp;
     } u;
 };
 
@@ -168,6 +169,8 @@ A_stm A_BreakStm(A_line);
 A_stm A_ContinueStm(A_line);
 
 A_stm A_ReturnStm(A_line, A_exp);
+
+A_stm A_ExpStm(A_line, A_exp);
 
 A_exp A_Call(A_line, S_symbol, A_expList);
 

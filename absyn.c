@@ -145,6 +145,14 @@ A_stm A_ReturnStm(A_line linno, A_exp ret) {
     return returnstm;
 }
 
+A_stm A_ExpStm(A_line linno, A_exp exp) {
+    A_stm expstm = checked_malloc(sizeof(*expstm));
+    expstm->linno = linno;
+    expstm->kind = A_EXP_STM;
+    expstm->u.exp = exp;
+    return expstm;
+}
+
 A_exp A_Call(A_line linno, S_symbol name, A_expList para) {
     A_exp exp = checked_malloc(sizeof(*exp));
     exp->linno = linno;

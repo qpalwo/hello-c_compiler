@@ -389,6 +389,9 @@ LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder
             LLVMPositionBuilderAtEnd(builder, end);
             return end;
         }
+        case A_EXP_STM: {
+            CG_exp(stm->u.exp, module, builder);
+        }
         case A_WHILE_STM: {
 
         }

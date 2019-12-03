@@ -117,6 +117,10 @@ void printStm(FILE * out, A_stm stm, int deepth) {
             printExp(out, stm->u.whilee.test, deepth + 1);
             printStmList(out, stm->u.whilee.whilee, deepth + 1);
             break;
+        case A_EXP_STM:
+            fprintf(out, "expStm\n");
+            printExp(out, stm->u.exp, deepth + 1);
+            break;
         case A_BREAK_STM:
             fprintf(out, "breakStm\n");
             break;
