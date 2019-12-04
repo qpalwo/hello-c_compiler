@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 2.8)
 project (hello-c)
 set(EXECUTABLE_NAME parser)
-
+set (CMAKE_CXX_STANDARD 11)
 set(LLVM_DIR /Users/xiaoyuxuan/SDK/clang+llvm-9.0.0-x86_64-darwin-apple/lib/cmake/llvm)
 
 set(
@@ -20,6 +20,7 @@ set(
 	compiler.c
 	env.c
 	label.c
+	mllvmwraper.cpp
 	symbol.c
 	table.c
 	type.c
@@ -65,7 +66,11 @@ llvm_map_components_to_libnames(
 	llvm_libs 
 	# support 
 	analysis
-	core 
+	core
+	executionengine
+	interpreter
+	mcjit
+	native
 	# irreader
 	)
 

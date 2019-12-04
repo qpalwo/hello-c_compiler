@@ -1,8 +1,10 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/Analysis.h>
+#include <llvm-c/ExecutionEngine.h>
 #include "util.h"
 #include "label.h"
 #include "symbol.h"
@@ -10,9 +12,16 @@
 #include "codegen.h"
 
 extern int CODEGEN_DEBUG;
-typedef struct CG_baseBlockList_ * CG_baseBlockList;
+typedef struct CG_baseBlockList_ *CG_baseBlockList;
+typedef struct CG_whileContext_ *CG_whileContext;
 
-LLVMBasicBlockRef CG_stmList(A_stmList stmList, LLVMModuleRef module, LLVMBuilderRef builder);
+struct CG_whileContext_ {
+    LLVMBasicBlockRef condBlock;
+    LLVMBasicBlockRef endBlock;
+};
+
+LLVMBasicBlockRef CG_stmList(A_stmList stmList, LLVMModuleRef module, LLVMBuilderRef builder, CG_whileContext wcontext);
+
 LLVMValueRef CG_exp(A_exp exp, LLVMModuleRef module, LLVMBuilderRef builder);
 
 struct CG_baseBlockList_ {
@@ -25,6 +34,13 @@ CG_baseBlockList CG_BaseBlockList(LLVMBasicBlockRef head, CG_baseBlockList tail)
     list->head = head;
     list->tail = tail;
     return list;
+}
+
+static CG_whileContext CG_WhileContext(LLVMBasicBlockRef cond, LLVMBasicBlockRef end) {
+    CG_whileContext context = checked_malloc(sizeof(*context));
+    context->condBlock = cond;
+    context->endBlock = end;
+    return context;
 }
 
 static void CG_dumpModule(LLVMModuleRef module) {
@@ -42,14 +58,26 @@ static void InternalError(int pos, char *message, ...) {
     fprintf(stderr, "\n");
 }
 
+static LLVMValueRef unwrapIfAPointer(LLVMValueRef value, LLVMBuilderRef builder) {
+    if (!value) {
+        return NULL;
+    }
+    LLVMTypeRef type = LLVMTypeOf(value);
+    LLVMTypeKind tykind = LLVMGetTypeKind(type);
+    if (tykind != LLVMPointerTypeKind) {
+        return value;
+    }
+    return LLVMBuildLoad(builder, value, Label_NewLabel("loaded"));
+}
+
 static CG_table TYPE_TABLE;
 
 void CG_typeInit() {
-    TYPE_TABLE = S_NewTable();
+    TYPE_TABLE = S_NewTable(FALSE);
     S_Enter(TYPE_TABLE, S_Symbol("void"), LLVMVoidType());
     S_Enter(TYPE_TABLE, S_Symbol("int"), LLVMInt32Type());
     S_Enter(TYPE_TABLE, S_Symbol("float"), LLVMFloatType());
-    S_Enter(TYPE_TABLE, S_Symbol("char"), LLVMInt8Type());
+    S_Enter(TYPE_TABLE, S_Symbol("char"), LLVMInt32Type());
 }
 
 LLVMValueRef CG_ZeroValueOfType(LLVMTypeRef type) {
@@ -107,7 +135,7 @@ LLVMValueRef *CG_callExpList2Ref(A_expList expList, LLVMModuleRef module, LLVMBu
         expList = expList->tail;
     }
     *count = num;
-    LLVMValueRef * refList = checked_malloc(sizeof(*refList) * num);
+    LLVMValueRef *refList = checked_malloc(sizeof(*refList) * num);
     for (int i = 0; i < num && list; i++, list = list->tail) {
         refList[i] = CG_exp(list->head, module, builder);
     }
@@ -133,26 +161,44 @@ LLVMValueRef CG_singleExp(A_exp exp, sop op, LLVMModuleRef module, LLVMBuilderRe
     LLVMTypeKind exptypekind = LLVMGetTypeKind(exptype);
     switch (op) {
         case A_SPLUS: {
-            if (exptypekind == LLVMIntegerTypeKind) {
-                LLVMValueRef ONE = LLVMConstInt(LLVMInt8Type(), 1, FALSE);
+            if (exptypekind != LLVMPointerTypeKind) {
+                InternalError(exp->linno, "alg exp type must be a pointer");
+                return NULL;
+            }
+            LLVMTypeRef elementTy = LLVMGetElementType(exptype);
+            LLVMTypeKind elementTyKind = LLVMGetTypeKind(elementTy);
+            if (elementTyKind == LLVMIntegerTypeKind) {
+                LLVMValueRef ONE = LLVMConstInt(LLVMInt32Type(), 1, FALSE);
                 LLVMValueRef load = LLVMBuildLoad(builder, expvalue, Label_NewLabel("load"));
-                LLVMValueRef added = LLVMBuildNSWAdd(builder, load, ONE, Label_NewLabel("add"));
+                LLVMValueRef added = LLVMBuildAdd(builder, load, ONE, Label_NewLabel("add"));
                 return LLVMBuildStore(builder, added, expvalue);
-            } else if (exptypekind == LLVMFloatTypeKind) {
+            } else if (elementTyKind == LLVMFloatTypeKind) {
                 LLVMValueRef ONE = LLVMConstReal(LLVMFloatType(), 1.0);
-                return LLVMBuildFAdd(builder, expvalue, ONE, "");
+                LLVMValueRef load = LLVMBuildLoad(builder, expvalue, Label_NewLabel("load"));
+                LLVMValueRef added = LLVMBuildFAdd(builder, expvalue, ONE, "");
+                return LLVMBuildStore(builder, added, expvalue);
             } else {
                 InternalError(exp->linno, "alg exp type must be float or int");
                 return NULL;
             }
         }
         case A_SMINUS: {
-            if (exptypekind == LLVMIntegerTypeKind) {
-                LLVMValueRef MONE = LLVMConstInt(LLVMInt8Type(), -1, FALSE);
-                return LLVMBuildAdd(builder, expvalue, MONE, "");
-            } else if (exptypekind == LLVMFloatTypeKind) {
-                LLVMValueRef MONE = LLVMConstReal(LLVMFloatType(), -1.0);
-                return LLVMBuildFAdd(builder, expvalue, MONE, "");
+            if (exptypekind != LLVMPointerTypeKind) {
+                InternalError(exp->linno, "alg exp type must be a pointer");
+                return NULL;
+            }
+            LLVMTypeRef elementTy = LLVMGetElementType(exptype);
+            LLVMTypeKind elementTyKind = LLVMGetTypeKind(elementTy);
+            if (elementTyKind == LLVMIntegerTypeKind) {
+                LLVMValueRef ONE = LLVMConstInt(LLVMInt32Type(), -1, FALSE);
+                LLVMValueRef load = LLVMBuildLoad(builder, expvalue, Label_NewLabel("load"));
+                LLVMValueRef subed = LLVMBuildAdd(builder, load, ONE, Label_NewLabel("add"));
+                return LLVMBuildStore(builder, subed, expvalue);
+            } else if (elementTyKind == LLVMFloatTypeKind) {
+                LLVMValueRef ONE = LLVMConstReal(LLVMFloatType(), -1.0);
+                LLVMValueRef load = LLVMBuildLoad(builder, expvalue, Label_NewLabel("load"));
+                LLVMValueRef subed = LLVMBuildFAdd(builder, expvalue, ONE, "");
+                return LLVMBuildStore(builder, subed, expvalue);
             } else {
                 InternalError(exp->linno, "alg exp type must be float or int");
                 return NULL;
@@ -172,10 +218,10 @@ LLVMValueRef CG_singleExp(A_exp exp, sop op, LLVMModuleRef module, LLVMBuilderRe
 }
 
 LLVMValueRef CG_doubleExp(A_exp le, A_exp re, dop op, LLVMModuleRef module, LLVMBuilderRef builder) {
-    LLVMValueRef lexpvalue = CG_exp(le, module, builder);
+    LLVMValueRef lexpvalue = unwrapIfAPointer(CG_exp(le, module, builder), builder);
     LLVMTypeRef lexptype = LLVMTypeOf(lexpvalue);
     LLVMTypeKind lexptypekind = LLVMGetTypeKind(lexptype);
-    LLVMValueRef rexpvalue = CG_exp(re, module, builder);
+    LLVMValueRef rexpvalue = unwrapIfAPointer(CG_exp(re, module, builder), builder);
     LLVMTypeRef rexptype = LLVMTypeOf(rexpvalue);
     LLVMTypeKind rexptypekind = LLVMGetTypeKind(rexptype);
     LLVMValueRef lfv = NULL, rfv = NULL;
@@ -191,7 +237,7 @@ LLVMValueRef CG_doubleExp(A_exp le, A_exp re, dop op, LLVMModuleRef module, LLVM
             rfv = LLVMBuildIntCast2(builder, rexpvalue, LLVMFloatType(), TRUE, "");
         }
         assert(lfv && lfv);
-    } 
+    }
     LLVMIntPredicate compareOP = 0;
     LLVMRealPredicate compareFOP = 0;
     switch (op) {
@@ -250,7 +296,7 @@ LLVMValueRef CG_doubleExp(A_exp le, A_exp re, dop op, LLVMModuleRef module, LLVM
         case A_BITAND: {
             if (!lfv) {
                 InternalError(le->linno, "logic algo must be int");
-                return LLVMConstInt(LLVMInt8Type(), 0, FALSE);
+                return LLVMConstInt(LLVMInt32Type(), 0, FALSE);
             } else {
                 return LLVMBuildAnd(builder, lfv, rfv, "");
             }
@@ -258,7 +304,7 @@ LLVMValueRef CG_doubleExp(A_exp le, A_exp re, dop op, LLVMModuleRef module, LLVM
         case A_BITOR: {
             if (!lfv) {
                 InternalError(le->linno, "logic algo must be int");
-                return LLVMConstInt(LLVMInt8Type(), 0, FALSE);
+                return LLVMConstInt(LLVMInt32Type(), 0, FALSE);
             } else {
                 return LLVMBuildOr(builder, lfv, rfv, "");
             }
@@ -295,7 +341,7 @@ LLVMValueRef CG_exp(A_exp exp, LLVMModuleRef module, LLVMBuilderRef builder) {
                 case A_INT:
                     return LLVMConstInt(LLVMInt32Type(), exp->u.cons.u.inum, FALSE);
                 case A_CHAR:
-                    return LLVMConstInt(LLVMInt8Type(), exp->u.cons.u.cnum, FALSE);
+                    return LLVMConstInt(LLVMInt32Type(), exp->u.cons.u.cnum, FALSE);
                 case A_FLOAT:
                     return LLVMConstReal(LLVMFloatType(), exp->u.cons.u.fnum);
                 case A_VAR:
@@ -309,7 +355,7 @@ LLVMValueRef CG_exp(A_exp exp, LLVMModuleRef module, LLVMBuilderRef builder) {
                 return NULL;
             }
             int paraCount = 0;
-            LLVMValueRef * paras = CG_callExpList2Ref(exp->u.call.para, module, builder, &paraCount);
+            LLVMValueRef *paras = CG_callExpList2Ref(exp->u.call.para, module, builder, &paraCount);
             LLVMValueRef call = LLVMBuildCall(builder, fun, paras, paraCount, "");
             if (!call) {
                 InternalError(exp->linno, "create call instrction error");
@@ -319,7 +365,7 @@ LLVMValueRef CG_exp(A_exp exp, LLVMModuleRef module, LLVMBuilderRef builder) {
         }
         case A_DOUBLE_EXP: {
             return CG_doubleExp(
-                exp->u.doublexp.left, exp->u.doublexp.right, exp->u.doublexp.op, module, builder);
+                    exp->u.doublexp.left, exp->u.doublexp.right, exp->u.doublexp.op, module, builder);
         }
         case A_SINGLE_EXP: {
             return CG_singleExp(exp->u.singexp.exp, exp->u.singexp.op, module, builder);
@@ -327,8 +373,8 @@ LLVMValueRef CG_exp(A_exp exp, LLVMModuleRef module, LLVMBuilderRef builder) {
     }
 }
 
-LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder) {
-    switch(stm->kind) {
+LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder, CG_whileContext wcontext) {
+    switch (stm->kind) {
         case A_ASSIGN_STM: {
             LLVMValueRef exp = CG_exp(stm->u.assign.exp, module, builder);
             if (!exp) {
@@ -354,8 +400,8 @@ LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder
         case A_IF_STM: {
             LLVMBasicBlockRef nowBlock = LLVMGetInsertBlock(builder);
             LLVMValueRef fun = LLVMGetBasicBlockParent(nowBlock);
-            LLVMValueRef cond = CG_exp(stm->u.iff.test, module, builder);
-            LLVMValueRef INTZERO = LLVMConstInt(LLVMInt8Type(), 0, FALSE);
+            LLVMValueRef cond = unwrapIfAPointer(CG_exp(stm->u.iff.test, module, builder), builder);
+            LLVMValueRef INTZERO = LLVMConstInt(LLVMInt32Type(), 0, FALSE);
             cond = LLVMBuildICmp(builder, LLVMIntNE, cond, INTZERO, Label_NewLabel("ifcond"));
             LLVMBasicBlockRef then = LLVMAppendBasicBlock(fun, Label_NewLabel("if.then"));
             LLVMBasicBlockRef elsee = LLVMAppendBasicBlock(fun, Label_NewLabel("if.else"));
@@ -364,14 +410,14 @@ LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder
             LLVMValueRef condins = LLVMBuildCondBr(builder, cond, then, elsee);
             LLVMPositionBuilderAtEnd(builder, then);
             Label_NewScope();
-            LLVMBasicBlockRef thenEndBlock = CG_stmList(stm->u.iff.iff, module, builder);
+            LLVMBasicBlockRef thenEndBlock = CG_stmList(stm->u.iff.iff, module, builder, wcontext);
             if (!thenEndBlock) {
                 LLVMBuildBr(builder, end);
             }
             Label_EndScope();
             LLVMPositionBuilderAtEnd(builder, elsee);
             Label_NewScope();
-            LLVMBasicBlockRef elseEndBlock = CG_stmList(stm->u.iff.elsee, module, builder);
+            LLVMBasicBlockRef elseEndBlock = CG_stmList(stm->u.iff.elsee, module, builder, wcontext);
             if (!elseEndBlock) {
                 LLVMBuildBr(builder, end);
             }
@@ -379,11 +425,15 @@ LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder
             // handle nested end block
             if (thenEndBlock) {
                 LLVMPositionBuilderAtEnd(builder, thenEndBlock);
-                LLVMBuildBr(builder, end);
+                if (!LLVMGetBasicBlockTerminator(thenEndBlock)) {
+                    LLVMBuildBr(builder, end);
+                }
             }
             if (elseEndBlock) {
                 LLVMPositionBuilderAtEnd(builder, elseEndBlock);
-                LLVMBuildBr(builder, end);
+                if (!LLVMGetBasicBlockTerminator(elseEndBlock)) {
+                    LLVMBuildBr(builder, end);
+                }
             }
             // set builder pointer at next BaseBlock
             LLVMPositionBuilderAtEnd(builder, end);
@@ -391,27 +441,68 @@ LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder
         }
         case A_EXP_STM: {
             CG_exp(stm->u.exp, module, builder);
+            return NULL;
         }
         case A_WHILE_STM: {
-
+            LLVMBasicBlockRef nowBlock = LLVMGetInsertBlock(builder);
+            LLVMValueRef fun = LLVMGetBasicBlockParent(nowBlock);
+            LLVMBasicBlockRef condBlock = LLVMAppendBasicBlock(fun, Label_NewLabel("while.cond"));
+            LLVMBasicBlockRef bodyBlock = LLVMAppendBasicBlock(fun, Label_NewLabel("while.body"));
+            LLVMBasicBlockRef endBlock = LLVMAppendBasicBlock(fun, Label_NewLabel("while.end"));
+            // create now while context
+            CG_whileContext mWContext = CG_WhileContext(condBlock, endBlock);
+            // build Br to condBlock
+            LLVMPositionBuilderAtEnd(builder, nowBlock);
+            LLVMBuildBr(builder, condBlock);
+            // build condBlock
+            LLVMPositionBuilderAtEnd(builder, condBlock);
+            LLVMValueRef cond = unwrapIfAPointer(CG_exp(stm->u.whilee.test, module, builder), builder);
+            LLVMValueRef INTZERO = LLVMConstInt(LLVMInt32Type(), 0, FALSE);
+            cond = LLVMBuildICmp(builder, LLVMIntNE, cond, INTZERO, Label_NewLabel("whilecond"));
+            LLVMBuildCondBr(builder, cond, bodyBlock, endBlock);
+            // build while body
+            LLVMPositionBuilderAtEnd(builder, bodyBlock);
+            Label_NewScope();
+            LLVMBasicBlockRef bodyend = CG_stmList(stm->u.whilee.whilee, module, builder, mWContext);
+            Label_EndScope();
+            LLVMBuildBr(builder, condBlock);
+            // handle body end block 
+            LLVMPositionBuilderAtEnd(builder, bodyend);
+            LLVMBuildBr(builder, endBlock);
+            // merge while block
+            LLVMPositionBuilderAtEnd(builder, endBlock);
+            return endBlock;
         }
         case A_BREAK_STM: {
-
+            if (!wcontext) {
+                InternalError(stm->linno, "break not in a while block");
+            }
+            LLVMBuildBr(builder, wcontext->endBlock);
+            return NULL;
         }
         case A_CONTINUE_STM: {
-
+            if (!wcontext) {
+                InternalError(stm->linno, "break not in a while block");
+            }
+            LLVMBuildBr(builder, wcontext->condBlock);
+            return NULL;
         }
         case A_RETURN_STM: {
-
+            LLVMValueRef retval = unwrapIfAPointer(CG_exp(stm->u.returnn, module, builder), builder);
+            if (retval) { 
+                LLVMBuildRet(builder, retval);
+            } else {
+                LLVMBuildRetVoid(builder);
+            }
+            return NULL;
         }
-        return NULL;
     }
 }
 
-LLVMBasicBlockRef CG_stmList(A_stmList stmList, LLVMModuleRef module, LLVMBuilderRef builder) {
+LLVMBasicBlockRef CG_stmList(A_stmList stmList, LLVMModuleRef module, LLVMBuilderRef builder, CG_whileContext wcontext) {
     CG_baseBlockList endblock = NULL;
     while (stmList && stmList->head) {
-        LLVMBasicBlockRef end = CG_stm(stmList->head, module, builder);
+        LLVMBasicBlockRef end = CG_stm(stmList->head, module, builder, wcontext);
         if (end) {
             endblock = CG_BaseBlockList(end, endblock);
         }
@@ -423,7 +514,9 @@ LLVMBasicBlockRef CG_stmList(A_stmList stmList, LLVMModuleRef module, LLVMBuilde
         LLVMBasicBlockRef endbb = LLVMAppendBasicBlock(fun, Label_NewLabel("end"));
         while (endblock && endblock->head) {
             LLVMPositionBuilderAtEnd(builder, endblock->head);
-            LLVMBuildBr(builder, endbb);
+            if (!LLVMGetBasicBlockTerminator(endblock->head)) {
+                LLVMBuildBr(builder, endbb);
+            }
             endblock = endblock->tail;
         }
         return endbb;
@@ -457,7 +550,7 @@ void CG_globalDec(A_globalDec globaldec, LLVMModuleRef module, LLVMBuilderRef bu
             LLVMPositionBuilderAtEnd(builder, block);
             // alloc para
             A_tyDecList paralist = globaldec->u.fun.para;
-            LLVMTypeRef * typeList = checked_malloc(sizeof(*typeList) * paraCount);
+            LLVMTypeRef *typeList = checked_malloc(sizeof(*typeList) * paraCount);
             LLVMGetParamTypes(funty, typeList);
             for (int i = 0; i < paraCount && paralist; i++, paralist = paralist->tail) {
                 S_symbol decName = TyDecName(paralist->head);
@@ -466,21 +559,23 @@ void CG_globalDec(A_globalDec globaldec, LLVMModuleRef module, LLVMBuilderRef bu
                 Label_NewDec(decName, paravalue);
             }
             // build fun body
-            LLVMBasicBlockRef bodyend = CG_stmList(globaldec->u.fun.body, module, builder);
+            LLVMBasicBlockRef bodyend = CG_stmList(globaldec->u.fun.body, module, builder, NULL);
             if (bodyend) {
                 LLVMPositionBuilderAtEnd(builder, bodyend);
             }
-            LLVMValueRef retv = CG_ZeroValueOfType(rettype);
-            if (retv) {
-                LLVMBuildRet(builder, retv);
-            } else {
-                LLVMBuildRetVoid(builder);
+            if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(builder))) {
+                LLVMValueRef retv = CG_ZeroValueOfType(rettype);
+                if (retv) {
+                    LLVMBuildRet(builder, retv);
+                } else {
+                    LLVMBuildRetVoid(builder);
+                }
             }
             Label_EndFun();
-            // if (LLVMVerifyFunction(fun, LLVMPrintMessageAction) == 1) {
-            //     InternalError(globaldec->linno, "error function");
-            //     LLVMDeleteFunction(fun);
-            // }
+            if (LLVMVerifyFunction(fun, LLVMPrintMessageAction) == 1) {
+                InternalError(globaldec->linno, "error function");
+                LLVMDeleteFunction(fun);
+            }
             break;
         }
         case A_STRUCT: {
@@ -509,6 +604,31 @@ void CG_globalDec(A_globalDec globaldec, LLVMModuleRef module, LLVMBuilderRef bu
     }
 }
 
+void execute(LLVMModuleRef module, LLVMValueRef func) {
+    string error = NULL;
+    LLVMExecutionEngineRef engine;
+
+    LLVMLinkInInterpreter();
+    LLVMInitializeNativeTarget();
+    LLVMInitializeNativeAsmPrinter();
+    if (LLVMCreateExecutionEngineForModule(&engine, module, &error) != 0) {
+        fprintf(stderr, "failed to create execution engine\n");
+        abort();
+    }
+    if (error) {
+        fprintf(stderr, "error: %s\n", error);
+        LLVMDisposeMessage(error);
+        exit(-1);
+    }
+    LLVMGenericValueRef args[] = {
+        LLVMCreateGenericValueOfInt(LLVMInt32Type(), 5, 0),
+        LLVMCreateGenericValueOfInt(LLVMInt32Type(), 10, 0)
+    };
+    LLVMGenericValueRef res = LLVMRunFunction(engine, func, 2, args);
+    printf("%d\n", (int)LLVMGenericValueToInt(res, 0));
+    LLVMDisposeExecutionEngine(engine);
+}
+
 void CG_codeGen(A_globalDecList ast) {
     Label_InitTable();
     LLVMModuleRef module = LLVMModuleCreateWithName("main-module");
@@ -520,8 +640,20 @@ void CG_codeGen(A_globalDecList ast) {
         CG_globalDec(ast->head, module, builder);
         ast = ast->tail;
     }
+    LLVMValueRef printff = NULL;
+    printff = LLVMGetNamedFunction(module, "sin");
+    string error = NULL;
+    LLVMVerifyModule(module, LLVMAbortProcessAction, &error);
+    if (!error) {
+        InternalError(-1, error);
+        return;
+    }
     CG_dumpModule(module);
+    LLVMValueRef exfun = Label_FindDec(S_Symbol("main"));
+    if (exfun) {
+        execute(module, exfun);
+    }
 
     LLVMDisposeBuilder(builder);
-    LLVMDisposeModule(module);
+//    LLVMDisposeModule(module);
 }

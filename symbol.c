@@ -6,6 +6,8 @@
 #include "table.h"
 #include "symbol.h"
 
+extern int TABLE_DEBUG;
+
 struct S_symbol_ {
     string name; 
     S_symbol next;
@@ -37,6 +39,12 @@ static int streq(string a, string b) {
     return !strcmp(a,b);
 }
 
+static void Indent(int tabs) {
+    for (int i = 0; i < tabs; i++) {
+        printf("\t");
+    }
+}
+
 S_symbol S_Symbol(const string name) {
     int index= hash(name) % SIZE;
     S_symbol syms = hashtable[index], sym;
@@ -57,6 +65,10 @@ string S_Name(S_symbol sym) {
 
 void S_Enter(S_table table, S_symbol key, void * value) {
     TB_Enter(table, key, value);
+    if (TB_GetDebug(table) && TABLE_DEBUG && key != &mask) {
+        Indent(TB_GetLevel(table));
+        printf("<enter> %s\n", S_Name(key));
+    }
 }
 
 void * S_Pop(S_table table) {
@@ -67,14 +79,22 @@ void * S_Find(S_table table, S_symbol key) {
     return TB_Find(table, key);
 }
 
-S_table S_NewTable() {
-    return TB_New();
+S_table S_NewTable(bool print) {
+    return TB_New(print);
 }
 
 void S_BeginScope(S_table table) {
     S_Enter(table, &mask, NULL);
+    TB_AddLevel(table);
+    if (TB_GetDebug(table) && TABLE_DEBUG) {
+        printf("--------- start scope level %d --------------\n", TB_GetLevel(table));
+    }
 }
 
 void S_EndScope(S_table table) {
+    if (TB_GetDebug(table) && TABLE_DEBUG) {
+        printf("----------- end scope level %d --------------\n", TB_GetLevel(table));
+    }
+    TB_DownLevel(table);
     while (S_Pop(table) != &mask);
 }

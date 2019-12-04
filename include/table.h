@@ -8,4 +8,12 @@ void * TB_Pop(TB_table);
 
 void * TB_Find(TB_table, void * key);
 
-TB_table TB_New();
+void TB_AddLevel(TB_table table);
+
+void TB_DownLevel(TB_table table);
+
+bool TB_GetDebug(TB_table table);
+
+int TB_GetLevel(TB_table table);
+
+TB_table TB_New(bool);

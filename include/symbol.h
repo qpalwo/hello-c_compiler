@@ -19,4 +19,4 @@ void S_BeginScope(S_table);
 
 void S_EndScope(S_table);
 
-S_table S_NewTable();
+S_table S_NewTable(bool);

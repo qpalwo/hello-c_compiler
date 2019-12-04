@@ -25,7 +25,7 @@ string count2string(int count) {
 }
 
 void Label_InitTable() {
-    LOCAL_TABLE = S_NewTable();
+    LOCAL_TABLE = S_NewTable(FALSE);
 }
 
 string Label_NewFun(S_symbol name, void * value) {
