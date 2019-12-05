@@ -20,7 +20,6 @@ set(
 	compiler.c
 	env.c
 	label.c
-	mllvmwraper.cpp
 	symbol.c
 	table.c
 	type.c

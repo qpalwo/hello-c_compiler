@@ -12,6 +12,7 @@
 #include "codegen.h"
 
 extern int CODEGEN_DEBUG;
+int VERIFY = 0;
 typedef struct CG_baseBlockList_ *CG_baseBlockList;
 typedef struct CG_whileContext_ *CG_whileContext;
 
@@ -68,6 +69,71 @@ static LLVMValueRef unwrapIfAPointer(LLVMValueRef value, LLVMBuilderRef builder)
         return value;
     }
     return LLVMBuildLoad(builder, value, Label_NewLabel("loaded"));
+}
+
+static void CG_initInternalFunction(LLVMModuleRef module, LLVMBuilderRef builder) {
+    // declare printf
+    LLVMTypeRef ret = LLVMInt32Type();
+    LLVMTypeRef para[] = { LLVMPointerType(LLVMInt8Type(), 0) };
+    LLVMTypeRef funty = LLVMFunctionType(ret, para, 1, TRUE);
+    LLVMValueRef fun = LLVMAddFunction(module, "printf", funty);
+    Label_NewDec(S_Symbol("printf"), fun);
+
+
+    LLVMTypeRef intpara[] = { LLVMInt32Type() };
+    LLVMTypeRef floatpara[] = { LLVMFloatType() };
+    LLVMTypeRef charpara[] = { LLVMInt8Type() };
+
+    LLVMTypeRef intfunty = LLVMFunctionType(LLVMVoidType(), intpara, 1, FALSE);
+    LLVMTypeRef floatfunty = LLVMFunctionType(LLVMVoidType(), floatpara, 1, FALSE);
+    LLVMTypeRef charfunty = LLVMFunctionType(LLVMVoidType(), charpara, 1, FALSE);
+
+    LLVMValueRef intfun = LLVMAddFunction(module, "printi", intfunty);
+    LLVMValueRef floatfun = LLVMAddFunction(module, "printfl", floatfunty);
+    LLVMValueRef charfun = LLVMAddFunction(module, "printc", charfunty);
+
+    Label_NewDec(S_Symbol("printi"), intfun);
+    Label_NewDec(S_Symbol("printfl"), floatfun);
+    Label_NewDec(S_Symbol("printc"), charfun);
+
+    LLVMBasicBlockRef intblock = LLVMAppendBasicBlock(intfun, "<entry>");
+    LLVMBasicBlockRef floatblock = LLVMAppendBasicBlock(floatfun, "<entry>");
+    LLVMBasicBlockRef charblock = LLVMAppendBasicBlock(charfun, "<entry>");
+
+    // build printi
+    LLVMPositionBuilderAtEnd(builder, intblock);
+    LLVMValueRef intStr = LLVMBuildGlobalStringPtr(builder, "int value: %d\n", "");
+    LLVMValueRef argi[] = {
+            intStr,
+            LLVMGetParam(intfun, 0)
+    };
+    LLVMBuildCall(builder, Label_FindDec(S_Symbol("printf")), argi, 2, "");
+    LLVMBuildRetVoid(builder);
+
+    //build printc
+    LLVMPositionBuilderAtEnd(builder, charblock);
+    LLVMValueRef charStr = LLVMBuildGlobalStringPtr(builder, "char value: %c\n", "");
+    LLVMValueRef argc[] = {
+            charStr,
+            LLVMGetParam(charfun, 0)
+    };
+    LLVMBuildCall(builder, Label_FindDec(S_Symbol("printf")), argc, 2, "");
+    LLVMValueRef argtmp[] = {
+            intStr,
+            LLVMConstInt(LLVMInt32Type(), 10, FALSE)
+    };
+    LLVMBuildCall(builder, Label_FindDec(S_Symbol("printf")), argtmp, 2, "");
+    LLVMBuildRetVoid(builder);
+
+    // build printfl
+    LLVMPositionBuilderAtEnd(builder, floatblock);
+    LLVMValueRef floatStr = LLVMBuildGlobalStringPtr(builder, "float value: %f\n", "");
+    LLVMValueRef argf[] = {
+            floatStr,
+            LLVMGetParam(floatfun, 0)
+    };
+    LLVMBuildCall(builder, Label_FindDec(S_Symbol("printf")), argf, 2, "");
+    LLVMBuildRetVoid(builder);
 }
 
 static CG_table TYPE_TABLE;
@@ -236,7 +302,7 @@ LLVMValueRef CG_doubleExp(A_exp le, A_exp re, dop op, LLVMModuleRef module, LLVM
         } else {
             rfv = LLVMBuildIntCast2(builder, rexpvalue, LLVMFloatType(), TRUE, "");
         }
-        assert(lfv && lfv);
+        assert(lfv && rfv);
     }
     LLVMIntPredicate compareOP = 0;
     LLVMRealPredicate compareFOP = 0;
@@ -572,7 +638,7 @@ void CG_globalDec(A_globalDec globaldec, LLVMModuleRef module, LLVMBuilderRef bu
                 }
             }
             Label_EndFun();
-            if (LLVMVerifyFunction(fun, LLVMPrintMessageAction) == 1) {
+            if (VERIFY && LLVMVerifyFunction(fun, LLVMPrintMessageAction) == 1) {
                 InternalError(globaldec->linno, "error function");
                 LLVMDeleteFunction(fun);
             }
@@ -633,20 +699,20 @@ void CG_codeGen(A_globalDecList ast) {
     Label_InitTable();
     LLVMModuleRef module = LLVMModuleCreateWithName("main-module");
     LLVMBuilderRef builder = LLVMCreateBuilder();
-
     CG_typeInit();
 
+    CG_initInternalFunction(module, builder);
     while (ast && ast->head) {
         CG_globalDec(ast->head, module, builder);
         ast = ast->tail;
     }
-    LLVMValueRef printff = NULL;
-    printff = LLVMGetNamedFunction(module, "sin");
     string error = NULL;
-    LLVMVerifyModule(module, LLVMAbortProcessAction, &error);
-    if (!error) {
-        InternalError(-1, error);
-        return;
+    if (VERIFY) {
+        LLVMVerifyModule(module, LLVMAbortProcessAction, &error);
+        if (!error) {
+            InternalError(-1, error);
+            return;
+        }
     }
     CG_dumpModule(module);
     LLVMValueRef exfun = Label_FindDec(S_Symbol("main"));
