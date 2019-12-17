@@ -5,6 +5,7 @@
 #include <llvm-c/Core.h>
 #include <llvm-c/Analysis.h>
 #include <llvm-c/ExecutionEngine.h>
+#include <llvm-c/BitWriter.h>
 #include "util.h"
 #include "label.h"
 #include "symbol.h"
@@ -12,13 +13,27 @@
 #include "codegen.h"
 
 extern int CODEGEN_DEBUG;
-int VERIFY = 0;
+extern int OUT_FLAG;
+extern string OUT_PATH;
+int VERIFY = 1;
 typedef struct CG_baseBlockList_ *CG_baseBlockList;
 typedef struct CG_whileContext_ *CG_whileContext;
+typedef union CG_typeInfo_ * CG_typeInfo;
 
 struct CG_whileContext_ {
     LLVMBasicBlockRef condBlock;
     LLVMBasicBlockRef endBlock;
+};
+
+union CG_typeInfo_ {
+    struct {
+        A_expList arrayBound;
+        LLVMTypeRef arrayType;
+    } array;
+    struct {
+        A_tyDecList dec;
+        LLVMTypeRef strucType;
+    } struc;
 };
 
 LLVMBasicBlockRef CG_stmList(A_stmList stmList, LLVMModuleRef module, LLVMBuilderRef builder, CG_whileContext wcontext);
@@ -35,6 +50,20 @@ CG_baseBlockList CG_BaseBlockList(LLVMBasicBlockRef head, CG_baseBlockList tail)
     list->head = head;
     list->tail = tail;
     return list;
+}
+
+CG_typeInfo CG_ArrayTypeInfo(A_expList expl, LLVMTypeRef arrty) {
+    CG_typeInfo info = checked_malloc(sizeof(*info));
+    info->array.arrayBound = expl;
+    info->array.arrayType = arrty;
+    return info;
+}
+
+CG_typeInfo CG_StrucTypeInfo(A_tyDecList decl, LLVMTypeRef structy) {
+    CG_typeInfo info = checked_malloc(sizeof(*info));
+    info->struc.dec = decl;
+    info->struc.strucType = structy;
+    return info;
 }
 
 static CG_whileContext CG_WhileContext(LLVMBasicBlockRef cond, LLVMBasicBlockRef end) {
@@ -79,10 +108,16 @@ static void CG_initInternalFunction(LLVMModuleRef module, LLVMBuilderRef builder
     LLVMValueRef fun = LLVMAddFunction(module, "printf", funty);
     Label_NewDec(S_Symbol("printf"), fun);
 
-
+    // declare main
+    LLVMTypeRef mainPara[] = { LLVMInt32Type(), LLVMPointerType(LLVMPointerType(LLVMInt8Type(), 0), 0) };
+    LLVMTypeRef mainFunty = LLVMFunctionType(ret, mainPara, 2, FALSE);
+    LLVMValueRef mainFun = LLVMAddFunction(module, "main", mainFunty);
+    Label_NewDec(S_Symbol("main"), mainFun);
+    
+    // declare print i fl c
     LLVMTypeRef intpara[] = { LLVMInt32Type() };
     LLVMTypeRef floatpara[] = { LLVMFloatType() };
-    LLVMTypeRef charpara[] = { LLVMInt8Type() };
+    LLVMTypeRef charpara[] = { LLVMInt32Type() };
 
     LLVMTypeRef intfunty = LLVMFunctionType(LLVMVoidType(), intpara, 1, FALSE);
     LLVMTypeRef floatfunty = LLVMFunctionType(LLVMVoidType(), floatpara, 1, FALSE);
@@ -118,11 +153,6 @@ static void CG_initInternalFunction(LLVMModuleRef module, LLVMBuilderRef builder
             LLVMGetParam(charfun, 0)
     };
     LLVMBuildCall(builder, Label_FindDec(S_Symbol("printf")), argc, 2, "");
-    LLVMValueRef argtmp[] = {
-            intStr,
-            LLVMConstInt(LLVMInt32Type(), 10, FALSE)
-    };
-    LLVMBuildCall(builder, Label_FindDec(S_Symbol("printf")), argtmp, 2, "");
     LLVMBuildRetVoid(builder);
 
     // build printfl
@@ -136,9 +166,16 @@ static void CG_initInternalFunction(LLVMModuleRef module, LLVMBuilderRef builder
     LLVMBuildRetVoid(builder);
 }
 
+static CG_table TYPE_INFO;
+
+void CG_typeInfoInit() {
+    TYPE_INFO = S_NewTable(FALSE);
+}
+
 static CG_table TYPE_TABLE;
 
 void CG_typeInit() {
+    CG_typeInfoInit();
     TYPE_TABLE = S_NewTable(FALSE);
     S_Enter(TYPE_TABLE, S_Symbol("void"), LLVMVoidType());
     S_Enter(TYPE_TABLE, S_Symbol("int"), LLVMInt32Type());
@@ -163,14 +200,25 @@ LLVMTypeRef CG_dec2TypeRef(A_tyDec dec) {
     switch (dec->kind) {
         case A_VAR_DEC: {
             LLVMTypeRef dectype = S_Find(TYPE_TABLE, dec->u.var.type);
+            CG_typeInfo info = S_Find(TYPE_INFO, dec->u.var.type);
+            if (info) {
+                S_Enter(TYPE_INFO, dec->u.var.name, info);
+            }
             if (!dectype) {
                 InternalError(dec->linno, "no such type defined");
             }
             return dectype;
         }
         case A_ARRAY_DEC: {
-            return NULL;
-            // LLVMArrayType()
+            int size = 0;
+            A_expList expl = dec->u.array.exp;
+            while (expl && expl->head) {
+                size *= expl->head->u.cons.u.inum;
+                expl = expl->tail;
+            }
+            LLVMTypeRef arrayty = LLVMArrayType(S_Find(TYPE_TABLE, dec->u.array.type), size);
+            S_Enter(TYPE_INFO, dec->u.array.name, CG_ArrayTypeInfo(dec->u.array.exp, arrayty));
+            return arrayty;
         }
         case A_NULL_DEC:
             return NULL;
@@ -180,7 +228,7 @@ LLVMTypeRef CG_dec2TypeRef(A_tyDec dec) {
 LLVMTypeRef *CG_decList2TypeRef(A_tyDecList declist, int *count) {
     A_tyDecList bodydec = declist;
     int bodyCount = 0;
-    while (bodydec) {
+    while (bodydec && bodydec->head->kind != A_NULL_DEC) {
         bodyCount++;
         bodydec = bodydec->tail;
     }
@@ -203,7 +251,12 @@ LLVMValueRef *CG_callExpList2Ref(A_expList expList, LLVMModuleRef module, LLVMBu
     *count = num;
     LLVMValueRef *refList = checked_malloc(sizeof(*refList) * num);
     for (int i = 0; i < num && list; i++, list = list->tail) {
-        refList[i] = CG_exp(list->head, module, builder);
+        LLVMValueRef para = CG_exp(list->head, module, builder);
+        if (list->head->kind == A_CONST && list->head->u.cons.kind == A_VAR) {
+            refList[i] = LLVMBuildLoad(builder, para, "");
+        } else {
+            refList[i] = para;
+        }
     }
     return refList;
 }
@@ -391,10 +444,51 @@ LLVMValueRef CG_var(A_var var, LLVMModuleRef module, LLVMBuilderRef builder) {
             return Label_FindDec(var->u.symbol);
         }
         case A_ARRAY_VAR: {
-
+            CG_typeInfo info = S_Find(TYPE_INFO, var->u.arrayvar.symbol);
+            LLVMValueRef array = Label_FindDec(var->u.arrayvar.symbol);
+            A_expList expl = var->u.arrayvar.exp;
+            A_expList bound = info->array.arrayBound;
+            LLVMValueRef indx = LLVMConstInt(LLVMInt32Type(), 0, FALSE);
+            while (expl && expl->head) {
+                LLVMValueRef res = CG_exp(expl->head, module, builder);
+                LLVMValueRef muled = LLVMBuildMul(
+                    builder, 
+                    res, 
+                    LLVMConstInt(LLVMInt32Type(), bound->head->u.cons.u.inum, FALSE),
+                    "");
+                expl = expl->tail;
+                bound = bound->tail;
+            }
+            return LLVMBuildGEP2(
+                builder, 
+                info->array.arrayType,
+                array,
+                (LLVMValueRef[]){ 
+                    LLVMConstInt(LLVMInt32Type(), 0, FALSE), 
+                    indx
+                }, 
+                2, 
+                "");
         }
         case A_STRUCT_VAR: {
-
+            CG_typeInfo info = S_Find(TYPE_INFO, var->u.structvar.para);
+            LLVMValueRef struc = Label_FindDec(var->u.structvar.para);
+            A_tyDecList decl = info->struc.dec;
+            int idx = 0;
+            while (decl) {
+                if (decl->head->u.var.name == var->u.structvar.child) {
+                    break;
+                }
+                idx++;
+                decl = decl->tail;
+            }
+            return LLVMBuildStructGEP2(
+                builder,
+                info->struc.strucType,
+                struc,
+                idx,
+                ""
+            );
         }
     }
 
@@ -459,6 +553,9 @@ LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder
                 InternalError(stm->linno, "create dec error");
             }
             S_symbol name = TyDecName(stm->u.dec);
+            if (!name) {
+                return NULL;
+            }
             LLVMValueRef dec = LLVMBuildAlloca(builder, dectype, S_Name(name));
             Label_NewDec(name, dec);
             return NULL;
@@ -467,7 +564,7 @@ LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder
             LLVMBasicBlockRef nowBlock = LLVMGetInsertBlock(builder);
             LLVMValueRef fun = LLVMGetBasicBlockParent(nowBlock);
             LLVMValueRef cond = unwrapIfAPointer(CG_exp(stm->u.iff.test, module, builder), builder);
-            LLVMValueRef INTZERO = LLVMConstInt(LLVMInt32Type(), 0, FALSE);
+            LLVMValueRef INTZERO = LLVMConstInt(LLVMInt1Type(), 0, FALSE);
             cond = LLVMBuildICmp(builder, LLVMIntNE, cond, INTZERO, Label_NewLabel("ifcond"));
             LLVMBasicBlockRef then = LLVMAppendBasicBlock(fun, Label_NewLabel("if.then"));
             LLVMBasicBlockRef elsee = LLVMAppendBasicBlock(fun, Label_NewLabel("if.else"));
@@ -478,14 +575,18 @@ LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder
             Label_NewScope();
             LLVMBasicBlockRef thenEndBlock = CG_stmList(stm->u.iff.iff, module, builder, wcontext);
             if (!thenEndBlock) {
-                LLVMBuildBr(builder, end);
+                if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(builder))) {
+                    LLVMBuildBr(builder, end);
+                }
             }
             Label_EndScope();
             LLVMPositionBuilderAtEnd(builder, elsee);
             Label_NewScope();
             LLVMBasicBlockRef elseEndBlock = CG_stmList(stm->u.iff.elsee, module, builder, wcontext);
             if (!elseEndBlock) {
-                LLVMBuildBr(builder, end);
+                if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(builder))) {
+                    LLVMBuildBr(builder, end);
+                }
             }
             Label_EndScope();
             // handle nested end block
@@ -620,6 +721,9 @@ void CG_globalDec(A_globalDec globaldec, LLVMModuleRef module, LLVMBuilderRef bu
             LLVMGetParamTypes(funty, typeList);
             for (int i = 0; i < paraCount && paralist; i++, paralist = paralist->tail) {
                 S_symbol decName = TyDecName(paralist->head);
+                if (!decName) {
+                    continue;
+                }
                 LLVMValueRef paravalue = LLVMBuildAlloca(builder, typeList[i], S_Name(decName));
                 LLVMBuildStore(builder, LLVMGetParam(fun, i), paravalue);
                 Label_NewDec(decName, paravalue);
@@ -653,6 +757,8 @@ void CG_globalDec(A_globalDec globaldec, LLVMModuleRef module, LLVMBuilderRef bu
             int bodyCount = 0;
             LLVMTypeRef *body = CG_decList2TypeRef(globaldec->u.struc.declist, &bodyCount);
             LLVMStructSetBody(struc, body, bodyCount, FALSE);
+            S_Enter(TYPE_INFO, globaldec->u.struc.name, 
+                CG_StrucTypeInfo(globaldec->u.struc.declist, struc));
             S_Enter(TYPE_TABLE, globaldec->u.struc.name, struc);
             break;
         }
@@ -706,6 +812,16 @@ void CG_codeGen(A_globalDecList ast) {
         CG_globalDec(ast->head, module, builder);
         ast = ast->tail;
     }
+    LLVMValueRef progMain = Label_FindDec(S_Symbol("hello_main")); 
+    if (!progMain) {
+        InternalError(-1, "no entry function");
+    } else {
+        LLVMValueRef mainFun = Label_FindDec(S_Symbol("main")); 
+        LLVMBasicBlockRef bb = LLVMAppendBasicBlock(mainFun, "<entry>");
+        LLVMPositionBuilderAtEnd(builder, bb);
+        LLVMBuildCall(builder, progMain, NULL, 0, "");
+        LLVMBuildRet(builder, LLVMConstInt(LLVMInt32Type(), 0, FALSE));
+    }
     string error = NULL;
     if (VERIFY) {
         LLVMVerifyModule(module, LLVMAbortProcessAction, &error);
@@ -715,7 +831,10 @@ void CG_codeGen(A_globalDecList ast) {
         }
     }
     CG_dumpModule(module);
-    LLVMValueRef exfun = Label_FindDec(S_Symbol("main"));
+    if (OUT_FLAG) {
+        LLVMWriteBitcodeToFile(module, OUT_PATH);
+    }
+    LLVMValueRef exfun = Label_FindDec(S_Symbol("test"));
     if (exfun) {
         execute(module, exfun);
     }

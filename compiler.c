@@ -20,6 +20,8 @@ extern void printSymbol(FILE * out, int index);
 int printWord = 0;
 int pAST = 0;
 int checkAST = 0;
+int OUT_FLAG = 0;
+string OUT_PATH = NULL;
 int CODEGEN_DEBUG = 1;
 int TABLE_DEBUG = 1;
 
@@ -34,11 +36,13 @@ void parse(string fileName) {
 
 int main(int argc, char **argv) {
     int opt;
-    string option = "cwdhpf:t";
+    string option = "cwdhpf:to:";
     string filePath = NULL;
     while ((opt = getopt(argc, argv, option)) != -1) {
         if (opt == 'h') {
             printf("-f <path-to-file>\n");
+            printf("-o <path-to-output-bc>");
+            printf("-c for check");
             printf("-t for lex print\n");
             printf("-d for bison debug output\n");
             printf("-w for word \n -p for AST print \n -h for this help");
@@ -52,6 +56,10 @@ int main(int argc, char **argv) {
         }
         if (opt == 'f') {
             filePath = optarg;
+        }
+        if (opt == 'o') {
+            OUT_FLAG = 1;
+            OUT_PATH = optarg;
         }
         if (opt == 'w') {
             printWord = 1;

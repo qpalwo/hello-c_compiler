@@ -118,11 +118,10 @@ TY_entry C_checkDec(A_tyDec dec, S_symbol *name, S_table venv, S_table tenv) {
                 S_Enter(tenv, type, var);
                 name = &dec->u.var.name;
             } else {
-                if (!S_Find(venv, dec->u.var.name)) {
-                    S_Enter(venv, dec->u.var.name, var);
-                } else {
+                if (S_Find(venv, dec->u.var.name)) {
                     ErrorMsg(dec->linno, "duplicate var dec %s", S_Name(dec->u.var.name));
                 }
+                S_Enter(venv, dec->u.var.name, var);
             }
             return var;
         }
@@ -138,6 +137,9 @@ TY_entry C_checkDec(A_tyDec dec, S_symbol *name, S_table venv, S_table tenv) {
             int level = 0;
             while (list && list->head) {
                 level++;
+                if (list->head->kind != A_CONST && list->head->u.cons.kind != TY_INT) {
+                    ErrorMsg(dec->linno, "array dec exp must be int");
+                }
                 list = list->tail;
             }
             TY_entry actTy = TY_Array(array, level);
