@@ -4,6 +4,7 @@ int b;
 struct A {
     int c
 }
+A a;
 
 A fun1() {
     ;

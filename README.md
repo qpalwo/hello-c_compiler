@@ -9,15 +9,27 @@ CMake build system.
 
 Download LLVM Pre-Build binaries from [LLVM Download](http://releases.llvm.org/download.html#9.0.0) or build from source.
 
-My LLVM binaries is 9.0.0
+My LLVM binaries version is 9.0.0
 
-Point $LLVM_DIR to your binaries path contains cmake build files.
+Point $LLVM_DIR in CMakeList.txt to your binaries path contains cmake build files.
 
 Then enjoy my bugly code :)
 
 ### Windows
 
 DO NOT TESTED. Similar as OSX or Linux.
+
+## compile command
+./parser -h for list of para
+
+./parser -f xxx.hc -o xxx.bc
+lli xxx.bc // use llvm interpreter to exec
+llc -filetype=obj xxx.bc // get object file 
+clang xxx.o -o xxx // link exectable file
+
+## **warning**
+**缺乏测试样例！！！！有很多 bug！！！！请勿直接使用**
+**MISSING TESTCASE!! DO NOT use directly!!**
 
 ## Released under MIT License
 

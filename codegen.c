@@ -230,7 +230,7 @@ LLVMTypeRef CG_dec2TypeRef(A_tyDec dec) {
             return dectype;
         }
         case A_ARRAY_DEC: {
-            int size = 0;
+            int size = 1;
             A_expList expl = dec->u.array.exp;
             while (expl && expl->head) {
                 size *= expl->head->u.cons.u.inum;
@@ -469,16 +469,18 @@ LLVMValueRef CG_var(A_var var, LLVMModuleRef module, LLVMBuilderRef builder) {
             A_expList expl = var->u.arrayvar.exp;
             A_expList bound = info->array.arrayBound;
             LLVMValueRef indx = LLVMConstInt(LLVMInt32Type(), 0, FALSE);
-            while (expl && expl->head) {
-                LLVMValueRef res = CG_exp(expl->head, module, builder);
+            while (expl && expl->tail) {
+                LLVMValueRef res = unwrapIfAPointer(CG_exp(expl->head, module, builder), builder);
                 LLVMValueRef muled = LLVMBuildMul(
                     builder, 
                     res, 
                     LLVMConstInt(LLVMInt32Type(), bound->head->u.cons.u.inum, FALSE),
                     "");
+                indx = LLVMBuildAdd(builder, muled, indx, "");
                 expl = expl->tail;
                 bound = bound->tail;
             }
+            indx = LLVMBuildAdd(builder, indx, unwrapIfAPointer(CG_exp(expl->head, module, builder), builder), "");
             return LLVMBuildGEP2(
                 builder, 
                 info->array.arrayType,
@@ -564,7 +566,7 @@ LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder
             if (!value) {
                 InternalError(stm->linno, "get assign stm value error");
             }
-            LLVMBuildStore(builder, exp, value);
+            LLVMBuildStore(builder, unwrapIfAPointer(exp, builder), value);
             return NULL;
         }
         case A_DEC_STM: {
@@ -644,7 +646,7 @@ LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder
             // build condBlock
             LLVMPositionBuilderAtEnd(builder, condBlock);
             LLVMValueRef cond = unwrapIfAPointer(CG_exp(stm->u.whilee.test, module, builder), builder);
-            LLVMValueRef INTZERO = LLVMConstInt(LLVMInt32Type(), 0, FALSE);
+            LLVMValueRef INTZERO = LLVMConstInt(LLVMInt1Type(), 0, FALSE);
             cond = LLVMBuildICmp(builder, LLVMIntNE, cond, INTZERO, Label_NewLabel("whilecond"));
             LLVMBuildCondBr(builder, cond, bodyBlock, endBlock);
             // build while body
@@ -652,10 +654,12 @@ LLVMBasicBlockRef CG_stm(A_stm stm, LLVMModuleRef module, LLVMBuilderRef builder
             Label_NewScope();
             LLVMBasicBlockRef bodyend = CG_stmList(stm->u.whilee.whilee, module, builder, mWContext);
             Label_EndScope();
-            LLVMBuildBr(builder, condBlock);
+            if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(builder))) {
+                LLVMBuildBr(builder, condBlock);
+            }
             // handle body end block 
             LLVMPositionBuilderAtEnd(builder, bodyend);
-            LLVMBuildBr(builder, endBlock);
+            LLVMBuildBr(builder, condBlock);
             // merge while block
             LLVMPositionBuilderAtEnd(builder, endBlock);
             return endBlock;
